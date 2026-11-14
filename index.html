@@ -94,6 +94,10 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 #visor{position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:30;display:none;align-items:center;justify-content:center}
 #visor.on{display:flex}
 #visor img{max-width:100%;max-height:100%}
+.vf{padding:0;align-items:stretch;overflow:hidden}
+.vf .abre{flex:1;display:flex;gap:11px;align-items:flex-start;background:none;border:0;text-align:left;padding:12px;min-height:56px}
+.vf .rev{flex:none;width:56px;border:0;border-left:1px solid var(--linea);background:none;font-size:22px;color:var(--linea)}
+.vf .rev.on{background:var(--term);color:#fff}
 .oculto{display:none!important}
 </style>
 </head>
@@ -102,6 +106,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 <main id="main"></main>
 <nav id="nav">
   <button data-v="tareas">Tareas</button>
+  <button data-v="visita">Visita</button>
   <button data-v="mas">Más</button>
 </nav>
 <div id="toast"></div>
@@ -112,7 +117,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='2.1 · fase 2';
+const VERSION='2.2 · fase 2';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas'},
   {id:'silvania',nombre:'Silvania'},
@@ -130,13 +135,10 @@ const ESTADOS={pendiente:'Pendiente',proceso:'En proceso',terminado:'Terminado'}
 let db;
 function abrir(){
   return new Promise((ok,no)=>{
-    const r=indexedDB.open('bitacora',1);
+    const r=indexedDB.open('bitacora',2);
     r.onupgradeneeded=()=>{
       const d=r.result;
-      d.createObjectStore('proyectos',{keyPath:'id'});
-      d.createObjectStore('tareas',{keyPath:'id'});
-      d.createObjectStore('fotos',{keyPath:'id'});
-      d.createObjectStore('meta',{keyPath:'k'});
+      [['proyectos','id'],['tareas','id'],['fotos','id'],['meta','k'],['visitas','id']].forEach(s=>{ if(!d.objectStoreNames.contains(s[0])) d.createObjectStore(s[0],{keyPath:s[1]}); });
     };
     r.onsuccess=()=>ok(r.result); r.onerror=()=>no(r.error);
   });
@@ -154,7 +156,7 @@ const dbDel=(s,k)=>tx(s,'readwrite',o=>o.delete(k));
 const dbClear=s=>tx(s,'readwrite',o=>o.clear());
 
 /* ---------- estado ---------- */
-let proyectos=[], tareas=[];
+let proyectos=[], tareas=[], visitas=[];
 const S={vista:'tareas', proy:'', filtro:'abiertas', q:'', tarea:null, urls:[]};
 const $=s=>document.querySelector(s);
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -171,7 +173,7 @@ async function iniciar(){
   db=await abrir();
   proyectos=await dbAll('proyectos');
   if(!proyectos.length){ for(const p of PROY_BASE){ const o={...p,estado:'activo'}; await dbPut('proyectos',o); proyectos.push(o);} }
-  tareas=(await dbAll('tareas')).map(norm);
+  tareas=(await dbAll('tareas')).map(norm); visitas=await dbAll('visitas');
   const m=await dbGet('meta','proy'); S.proy=(m&&proyectos.some(p=>p.id===m.v))?m.v:proyectos[0].id;
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
   sinc.token=((await dbGet('meta','token'))||{}).v||''; sinc.aplicadas=((await dbGet('meta','entrada'))||{}).v||[];
@@ -185,6 +187,7 @@ function pintar(){
   $('#nav').classList.toggle('oculto',S.vista==='ficha');
   if(S.vista==='tareas'){cabecera();vistaTareas();}
   else if(S.vista==='ficha'){vistaFicha();}
+  else if(S.vista==='visita'){cabecera();vistaVisita();}
   else {cabecera();vistaMas();}
 }
 function cabecera(){
@@ -239,7 +242,7 @@ async function vistaTareas(){
   const bi=$('#bInst'); if(bi) bi.onclick=async()=>{const ev=instalar; if(!ev)return; ev.prompt(); try{await ev.userChoice;}catch(e){} instalar=null; vistaTareas();};
   $('#rapOk').onclick=add; $('#rap').onkeydown=e=>{if(e.key==='Enter')add();};
   document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{S.filtro=c.dataset.f;vistaTareas();});
-  document.querySelectorAll('.fila').forEach(f=>f.onclick=()=>{S.tarea=f.dataset.id;S.vista='ficha';pintar();window.scrollTo(0,0);});
+  document.querySelectorAll('.fila').forEach(f=>f.onclick=()=>{S.tarea=f.dataset.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);});
   const b=$('#bus'); if(b) b.oninput=()=>{S.q=b.value;clearTimeout(b._t);b._t=setTimeout(()=>vistaTareas().then(()=>{const x=$('#bus');if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length);}}),350);};
 }
 async function nuevaTarea(d){
@@ -250,7 +253,7 @@ async function nuevaTarea(d){
 
 /* ---------- ficha ---------- */
 let guardarT;
-function guardar(t){ t.actualizado=ahora(); clearTimeout(guardarT); guardarT=setTimeout(()=>dbPut('tareas',t),300); programar(); }
+function guardar(t){ t.actualizado=ahora(); const va=visitaActiva(t.proyecto); if(va&&!va.revisadas.includes(t.id)){va.revisadas.push(t.id);dbPut('visitas',va);} clearTimeout(guardarT); guardarT=setTimeout(()=>dbPut('tareas',t),300); programar(); }
 function vistaFicha(){
   const t=tareas.find(x=>x.id===S.tarea); if(!t){S.vista='tareas';return pintar();}
   $('#cab').innerHTML='<button class="atras" id="atras" aria-label="Volver">←</button><h1>'+esc(nombreProy(t.proyecto))+'</h1>';
@@ -283,7 +286,7 @@ function vistaFicha(){
   $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);programar();cerrarFicha();toast('Borrada');};
 }
 function liberar(){S.urls.forEach(u=>URL.revokeObjectURL(u));S.urls=[];}
-function cerrarFicha(){const t=tareas.find(x=>x.id===S.tarea);if(t){clearTimeout(guardarT);dbPut('tareas',t);}liberar();S.vista='tareas';S.tarea=null;pintar();}
+function cerrarFicha(){const t=tareas.find(x=>x.id===S.tarea);if(t){clearTimeout(guardarT);dbPut('tareas',t);}liberar();S.vista=S.volver||'tareas';S.tarea=null;pintar();}
 function pintarSeg(t){
   $('#seg').innerHTML=Object.keys(ESTADOS).map(e=>'<button data-e="'+e+'" class="'+(t.estado===e?'on':'')+'">'+ESTADOS[e]+'</button>').join('');
   document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
@@ -329,6 +332,49 @@ function pintarHist(t){
   $('#hist').innerHTML=h;
 }
 $('#visor').onclick=()=>$('#visor').classList.remove('on');
+
+/* ---------- visita ---------- */
+const visitaActiva=p=>visitas.find(v=>!v.fin&&v.proyecto===(p||S.proy));
+function infoTarea(t){
+  const s=[t.tema]; if(t.estado==='proceso')s.push('En proceso'); if(t.estado==='terminado')s.push('Terminado');
+  if(t.pasos.length)s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' pasos');
+  const pm=t.medidas.filter(m=>m.valor===''&&m.nombre).length; if(pm)s.push(pm+' por medir');
+  const fm=t.materiales.filter(m=>!m.listo).length; if(fm)s.push(fm+(fm===1?' material falta':' materiales faltan'));
+  return s.map(esc).join(' · ');
+}
+function vistaVisita(){
+  const v=visitaActiva(); let h='';
+  if(!v){
+    h+='<button class="btn" id="vIni" style="width:100%">Iniciar visita en '+esc(nombreProy(S.proy))+'</button>';
+    const ant=visitas.filter(x=>x.proyecto===S.proy&&x.fin).sort((a,b)=>a.inicio<b.inicio?1:-1);
+    if(!ant.length) h+='<div class="vacio">Sin visitas registradas en '+esc(nombreProy(S.proy))+'.<br>En la visita recorres las tareas abiertas, anotas observaciones nuevas y al final dejas un cierre.</div>';
+    else h+='<h2 class="tema"><span>Visitas anteriores</span><span>'+ant.length+'</span></h2>';
+    ant.forEach(x=>{h+='<div class="tarj"><h3>'+fechaHora(x.inicio)+'</h3><p>'+[x.clima,x.personal].filter(Boolean).map(esc).join(' · ')+(x.clima||x.personal?'<br>':'')+x.revisadas.length+' tareas revisadas · '+x.nuevas.length+' nuevas'+(x.nota?'<br>'+esc(x.nota):'')+'</p></div>';});
+    $('#main').innerHTML=h;
+    $('#vIni').onclick=async()=>{const n={id:uid(),proyecto:S.proy,inicio:ahora(),fin:'',clima:'',personal:'',nota:'',revisadas:[],nuevas:[]};visitas.push(n);await dbPut('visitas',n);programar();vistaVisita();};
+    return;
+  }
+  const lista=delProyecto().filter(t=>t.estado!=='terminado'||v.revisadas.includes(t.id)).sort((a,b)=>(v.revisadas.includes(a.id)-v.revisadas.includes(b.id))||(a.tema||'').localeCompare(b.tema||'')||(a.creado<b.creado?-1:1));
+  const rv=lista.filter(t=>v.revisadas.includes(t.id)).length;
+  h+='<div class="rapida"><input type="text" id="vRap" placeholder="Anotar observación nueva…" enterkeyhint="done" autocomplete="off"><button class="btn" id="vRapOk">+</button></div>';
+  h+='<h2 class="tema"><span>Visita del '+fechaHora(v.inicio)+'</span><span>Revisadas '+rv+' de '+lista.length+'</span></h2>';
+  if(!lista.length) h+='<div class="vacio">No hay tareas abiertas. Anota arriba lo que veas.</div>';
+  lista.forEach(t=>{const on=v.revisadas.includes(t.id);
+    h+='<div class="fila vf '+t.estado+'"><button class="abre" data-id="'+t.id+'"><span class="punto '+t.estado+'"></span><span><div class="t">'+esc(t.titulo||'(sin título)')+'</div><div class="s">'+infoTarea(t)+'</div></span></button><button class="rev'+(on?' on':'')+'" data-id="'+t.id+'" aria-label="Marcar revisada">✓</button></div>';});
+  h+='<label class="et">Clima</label><div class="chips" id="vClima">'+['Sol','Nublado','Lluvia'].map(c=>'<button class="chip'+(v.clima===c?' on':'')+'" data-c="'+c+'">'+c+'</button>').join('')+'</div>'+
+     '<label class="et" for="vPer">Personal en obra</label><input type="text" id="vPer" placeholder="Ej.: 2 oficiales, 1 ayudante" value="'+esc(v.personal)+'">'+
+     '<label class="et" for="vNota">Avance y notas del día</label><textarea id="vNota">'+esc(v.nota)+'</textarea>'+
+     '<button class="btn" id="vFin" style="width:100%;margin-top:14px">Cerrar visita</button>';
+  $('#main').innerHTML=h;
+  const gv=()=>{dbPut('visitas',v);programar();};
+  const add=async()=>{const i=$('#vRap');const x=i.value.trim();if(!x)return;const t=await nuevaTarea({titulo:x,origen:'Visita '+fecha(v.inicio)});v.nuevas.push(t.id);v.revisadas.push(t.id);gv();toast('Anotado');vistaVisita();$('#vRap').focus();};
+  $('#vRapOk').onclick=add; $('#vRap').onkeydown=e=>{if(e.key==='Enter')add();};
+  document.querySelectorAll('.vf .abre').forEach(b=>b.onclick=()=>{S.tarea=b.dataset.id;S.volver='visita';S.vista='ficha';pintar();window.scrollTo(0,0);});
+  document.querySelectorAll('.vf .rev').forEach(b=>b.onclick=()=>{const id=b.dataset.id;const k=v.revisadas.indexOf(id);if(k<0)v.revisadas.push(id);else if(!v.nuevas.includes(id))v.revisadas.splice(k,1);gv();const y=window.scrollY;vistaVisita();window.scrollTo(0,y);});
+  document.querySelectorAll('#vClima .chip').forEach(c=>c.onclick=()=>{v.clima=v.clima===c.dataset.c?'':c.dataset.c;gv();document.querySelectorAll('#vClima .chip').forEach(x=>x.classList.toggle('on',x.dataset.c===v.clima));});
+  $('#vPer').oninput=e=>{v.personal=e.target.value;gv();}; $('#vNota').oninput=e=>{v.nota=e.target.value;gv();};
+  $('#vFin').onclick=()=>{const falta=lista.length-rv; if(falta&&!confirm('Quedan '+falta+' tareas sin revisar. ¿Cerrar la visita de todas formas?'))return; v.fin=ahora();gv();toast('Visita cerrada');vistaVisita();window.scrollTo(0,0);};
+}
 
 /* ---------- fotos ---------- */
 function reducir(file){
@@ -400,7 +446,7 @@ const aData=b=>new Promise(ok=>{const r=new FileReader();r.onload=()=>ok(r.resul
 async function respaldar(){
   toast('Armando respaldo…');
   const fotos=[]; for(const f of await dbAll('fotos')) fotos.push({id:f.id,tarea:f.tarea,fecha:f.fecha,data:await aData(f.blob)});
-  const datos={app:'bitacora',formato:1,fecha:ahora(),proyectos,tareas,fotos};
+  const datos={app:'bitacora',formato:1,fecha:ahora(),proyectos,tareas,visitas,fotos};
   const nombre='Bitacora_respaldo_'+hoy()+'.json';
   const file=new File([JSON.stringify(datos)],nombre,{type:'application/json'});
   let hecho=false;
@@ -417,6 +463,7 @@ async function sumarDatos(d){
     if(i<0){tareas.push(t);await dbPut('tareas',t);nt++;}
     else if((t.actualizado||'')>(tareas[i].actualizado||'')){tareas[i]=t;await dbPut('tareas',t);nt++;} }
   for(const ft of d.fotos||[]){ if(!ft.data||await dbGet('fotos',ft.id))continue; const blob=await (await fetch(ft.data)).blob(); await dbPut('fotos',{id:ft.id,tarea:ft.tarea,fecha:ft.fecha,blob}); }
+  for(const v of d.visitas||[]){ if(!v||!v.id||visitas.some(x=>x.id===v.id))continue; v.revisadas=v.revisadas||[];v.nuevas=v.nuevas||[]; visitas.push(v); await dbPut('visitas',v); }
   return nt;
 }
 
@@ -466,10 +513,10 @@ async function sincronizar(manual){
       if(!r.ok&&r.status!==422) throw falla(r);
       f.subida=true; await dbPut('fotos',f); }
     // 3. Estado de las tareas (solo si cambió)
-    const cuerpo=JSON.stringify({proyectos,tareas}); const firma=hashTxt(cuerpo);
+    const cuerpo=JSON.stringify({proyectos,tareas,visitas}); const firma=hashTxt(cuerpo);
     if(firma!==sinc.firma){
       let sha; const g=await gh('app/tareas.json'); if(g.status===200)sha=(await g.json()).sha; else if(g.status!==404)throw falla(g);
-      const txt=JSON.stringify({app:'bitacora',formato:1,fecha:ahora(),proyectos,tareas},null,1);
+      const txt=JSON.stringify({app:'bitacora',formato:1,fecha:ahora(),proyectos,tareas,visitas},null,1);
       const r=await gh('app/tareas.json',{method:'PUT',body:JSON.stringify({message:'tareas '+hoy(),content:b64txt(txt),sha})}); if(!r.ok)throw falla(r);
       sinc.firma=firma; await dbPut('meta',{k:'firma',v:firma}); }
     sinc.ultimo=ahora(); sinc.error=''; await dbPut('meta',{k:'sinc',v:sinc.ultimo});
@@ -477,6 +524,7 @@ async function sincronizar(manual){
   }catch(e){ sinc.error=(e&&e.message)||'error de red.'; if(manual)toast('No se pudo sincronizar'); }
   sinc.ocupado=false; ver();
   if(entraron&&S.vista==='tareas') vistaTareas();
+  if(entraron&&S.vista==='visita') vistaVisita();
 }
 window.addEventListener('online',()=>sincronizar());
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') sincronizar(); });
@@ -486,7 +534,7 @@ $('#inArch').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f)return;
   let d; try{d=JSON.parse(await f.text());}catch(x){return toast('El archivo no se pudo leer');}
   if(!d||d.app!=='bitacora'||!Array.isArray(d.tareas))return toast('No es un respaldo de Bitácora');
-  if(modoArch==='restaurar'){await dbClear('tareas');await dbClear('fotos');await dbClear('proyectos');proyectos=[];tareas=[];}
+  if(modoArch==='restaurar'){await dbClear('tareas');await dbClear('fotos');await dbClear('proyectos');await dbClear('visitas');proyectos=[];tareas=[];visitas=[];}
   const nt=await sumarDatos(d);
   if(!proyectos.length){for(const p of PROY_BASE){const o={...p,estado:'activo'};await dbPut('proyectos',o);proyectos.push(o);}}
   if(!proyectos.some(p=>p.id===S.proy))S.proy=proyectos[0].id;

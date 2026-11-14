@@ -17,9 +17,10 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - Ficha con pasos, materiales y medidas por tomar.
 - Sincronización con el repo privado `Bitacora-datos` (llave de GitHub guardada solo en el celular): la app sube `app/tareas.json` y `app/fotos/<id>.jpg`, y suma lo que Claude deja en `claude/entrada/*.json` (mismo formato del respaldo).
 
+- Modo visita: recorrido de tareas abiertas con marca de revisada, observaciones nuevas y cierre (clima, personal, nota). Las visitas van en `app/tareas.json`.
+
 ## Pendiente
 
-- Modo visita.
 - Fase 3: diario, cierre del día e informe PDF.
 
 ## Archivos
