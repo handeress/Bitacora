@@ -19,8 +19,15 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 
 - Modo visita: recorrido de tareas abiertas con marca de revisada, observaciones nuevas y cierre (clima, personal, nota). Las visitas van en `app/tareas.json`.
 
+## Fase 3
+
+- Color de referencia por proyecto (franja del encabezado y títulos), editable en Más → Proyectos.
+- Cambio de proyecto desde la ficha de la tarea.
+- Diario: línea de tiempo por obra con tareas nuevas, cambios de estado y visitas.
+
 ## Pendiente
 
+- Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).
 - Fase 3: diario, cierre del día e informe PDF.
 
 ## Archivos
