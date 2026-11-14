@@ -64,6 +64,12 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 .med{display:grid;grid-template-columns:1fr 84px 76px 40px;gap:6px;margin-bottom:6px}
 .med input,.med select{min-height:44px;padding:9px 8px}
 .med .x{background:none;border:0;color:var(--gris);font-size:20px}
+.paso{display:grid;grid-template-columns:44px 1fr 40px;gap:6px;margin-bottom:6px;align-items:center}
+.mat{display:grid;grid-template-columns:44px 1fr 62px 74px 36px;gap:5px;margin-bottom:6px;align-items:center}
+.paso input[type=text],.mat input[type=text],.mat select{min-height:44px;padding:9px 8px}
+.paso input[type=checkbox],.mat input[type=checkbox]{width:26px;height:26px;margin:0 auto;accent-color:var(--term)}
+.paso .x,.mat .x{background:none;border:0;color:var(--gris);font-size:20px}
+.hecho{color:var(--gris);text-decoration:line-through}
 .fotos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
 .fotos .f{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--linea)}
 .fotos img{width:100%;height:100%;object-fit:cover;display:block}
@@ -104,7 +110,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='1.1 · fase 1';
+const VERSION='1.2 · fase 1';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas'},
   {id:'silvania',nombre:'Silvania'},
@@ -113,6 +119,8 @@ const PROY_BASE=[
 ];
 const TEMAS=['Medidas para compras','Revisar','Corregir','Definir','Hacer','Sin clasificar'];
 const UNIDADES=['m','cm','mm','m²','m³','und','kg','"','otro'];
+const MAT_UNID=['und','m','m²','m³','kg','bulto','gl','otro'];
+const norm=t=>{t.medidas=t.medidas||[];t.fotos=t.fotos||[];t.historial=t.historial||[];t.pasos=t.pasos||[];t.materiales=t.materiales||[];return t;};
 const ESTADOS={pendiente:'Pendiente',proceso:'En proceso',terminado:'Terminado'};
 
 /* ---------- base de datos ---------- */
@@ -160,7 +168,7 @@ async function iniciar(){
   db=await abrir();
   proyectos=await dbAll('proyectos');
   if(!proyectos.length){ for(const p of PROY_BASE){ const o={...p,estado:'activo'}; await dbPut('proyectos',o); proyectos.push(o);} }
-  tareas=await dbAll('tareas');
+  tareas=(await dbAll('tareas')).map(norm);
   const m=await dbGet('meta','proy'); S.proy=(m&&proyectos.some(p=>p.id===m.v))?m.v:proyectos[0].id;
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
   pintar();
@@ -212,7 +220,10 @@ async function vistaTareas(){
       if(t.estado==='proceso') s.push('En proceso');
       if(t.responsable) s.push(esc(t.responsable));
       if(t.limite) s.push('<span class="'+(vencida(t)?'venc':'')+'">'+(vencida(t)?'Venció ':'Para ')+fecha(t.limite)+'</span>');
-      const nm=(t.medidas||[]).filter(m=>m.valor!=='').length; if(nm) s.push(nm+(nm===1?' medida':' medidas'));
+      if(t.pasos.length) s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' pasos');
+      const pm=t.medidas.filter(m=>m.valor===''&&m.nombre).length; if(pm) s.push(pm+' por medir');
+      const fm=t.materiales.filter(m=>!m.listo).length; if(fm) s.push(fm+(fm===1?' material falta':' materiales faltan'));
+      const nm=t.medidas.filter(m=>m.valor!=='').length; if(nm) s.push(nm+(nm===1?' medida':' medidas'));
       if((t.fotos||[]).length) s.push(t.fotos.length+(t.fotos.length===1?' foto':' fotos'));
       if(t.respuesta&&!s.length) s.push(esc(t.respuesta.slice(0,60)));
       h+='<button class="fila '+t.estado+'" data-id="'+t.id+'"><span class="punto '+t.estado+'"></span><span><div class="t">'+esc(t.titulo||'(sin título)')+'</div>'+(s.length?'<div class="s">'+s.join(' · ')+'</div>':'')+'</span></button>';
@@ -227,7 +238,7 @@ async function vistaTareas(){
   const b=$('#bus'); if(b) b.oninput=()=>{S.q=b.value;clearTimeout(b._t);b._t=setTimeout(()=>vistaTareas().then(()=>{const x=$('#bus');if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length);}}),350);};
 }
 async function nuevaTarea(d){
-  const t=Object.assign({id:uid(),proyecto:S.proy,tema:'Sin clasificar',titulo:'',detalle:'',estado:'pendiente',respuesta:'',medidas:[],fotos:[],responsable:'',limite:'',
+  const t=Object.assign({id:uid(),proyecto:S.proy,tema:'Sin clasificar',titulo:'',detalle:'',estado:'pendiente',respuesta:'',medidas:[],pasos:[],materiales:[],fotos:[],responsable:'',limite:'',
     creado:ahora(),actualizado:ahora(),historial:[]},d);
   tareas.push(t); await dbPut('tareas',t); return t;
 }
@@ -246,8 +257,10 @@ function vistaFicha(){
     '<label class="et" for="fTema">Tema</label><input type="text" id="fTema" list="temas" value="'+esc(t.tema)+'"><datalist id="temas">'+
       [...new Set(TEMAS.concat(tareas.map(x=>x.tema).filter(Boolean)))].map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist>'+
     '<label class="et" for="fDet">Qué hay que hacer</label><textarea id="fDet">'+esc(t.detalle)+'</textarea>'+
+    '<label class="et">Pasos</label><div id="pasos"></div><button class="btn sec" id="masPaso">+ Paso</button>'+
+    '<label class="et">Materiales (chulo = ya está en obra)</label><div id="mats"></div><button class="btn sec" id="masMat">+ Material</button>'+
     '<label class="et" for="fRes">Respuesta / observación</label><textarea id="fRes">'+esc(t.respuesta)+'</textarea>'+
-    '<label class="et">Medidas tomadas</label><div id="meds"></div><button class="btn sec" id="masMed">+ Medida</button>'+
+    '<label class="et">Medidas (sin valor = falta medir)</label><div id="meds"></div><button class="btn sec" id="masMed">+ Medida</button>'+
     '<label class="et">Fotos</label><div class="fotos" id="fotos"></div><div class="dos"><button class="btn sec" id="bCam">Cámara</button><button class="btn sec" id="bGal">Galería</button></div>'+
     '<div class="dos"><div><label class="et" for="fResp">Responsable</label><input type="text" id="fResp" value="'+esc(t.responsable)+'"></div>'+
     '<div><label class="et" for="fLim">Fecha límite</label><input type="date" id="fLim" value="'+esc(t.limite)+'"></div></div>'+
@@ -255,10 +268,13 @@ function vistaFicha(){
     '<div class="dos" style="margin-top:22px"><button class="btn sec" id="bDup">Duplicar</button><button class="btn pel" id="bBor">Borrar</button></div>';
   const liga=(id,campo)=>{$(id).oninput=e=>{t[campo]=e.target.value;guardar(t);};};
   liga('#fTit','titulo');liga('#fTema','tema');liga('#fDet','detalle');liga('#fRes','respuesta');liga('#fResp','responsable');liga('#fLim','limite');
-  pintarSeg(t);pintarMeds(t);pintarFotos(t);pintarHist(t);
+  pintarSeg(t);pintarPasos(t);pintarMats(t);pintarMeds(t);
+  $('#masPaso').onclick=()=>{t.pasos.push({texto:'',hecho:false});guardar(t);pintarPasos(t);const f=document.querySelectorAll('#pasos input[type=text]');f[f.length-1].focus();};
+  $('#masMat').onclick=()=>{t.materiales.push({nombre:'',cantidad:'',unidad:'und',listo:false});guardar(t);pintarMats(t);const f=document.querySelectorAll('#mats input[data-c=nombre]');f[f.length-1].focus();};
+  pintarFotos(t);pintarHist(t);
   $('#masMed').onclick=()=>{t.medidas.push({nombre:'',valor:'',unidad:'m'});guardar(t);pintarMeds(t);const f=document.querySelectorAll('#meds .med input');if(f.length)f[f.length-2].focus();};
   $('#bCam').onclick=()=>$('#inCam').click(); $('#bGal').onclick=()=>$('#inGal').click();
-  $('#bDup').onclick=async()=>{const c=await nuevaTarea({proyecto:t.proyecto,tema:t.tema,titulo:t.titulo+' (copia)',detalle:t.detalle,responsable:t.responsable});liberar();S.tarea=c.id;pintar();window.scrollTo(0,0);toast('Duplicada');};
+  $('#bDup').onclick=async()=>{const c=await nuevaTarea({proyecto:t.proyecto,tema:t.tema,titulo:t.titulo+' (copia)',detalle:t.detalle,responsable:t.responsable,pasos:t.pasos.map(x=>({texto:x.texto,hecho:false})),materiales:t.materiales.map(x=>({...x,listo:false}))});liberar();S.tarea=c.id;pintar();window.scrollTo(0,0);toast('Duplicada');};
   $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);cerrarFicha();toast('Borrada');};
 }
 function liberar(){S.urls.forEach(u=>URL.revokeObjectURL(u));S.urls=[];}
@@ -270,6 +286,21 @@ function pintarSeg(t){
     t.historial.push({fecha:ahora(),de:t.estado,a:e,nota:$('#nota').value.trim()});
     t.estado=e;$('#nota').value='';guardar(t);pintarSeg(t);pintarHist(t);toast(ESTADOS[e]);
   });
+}
+function pintarPasos(t){
+  $('#pasos').innerHTML=t.pasos.map((p,i)=>'<div class="paso"><input type="checkbox" data-i="'+i+'"'+(p.hecho?' checked':'')+' aria-label="Hecho"><input type="text" class="'+(p.hecho?'hecho':'')+'" placeholder="Paso" data-i="'+i+'" value="'+esc(p.texto)+'"><button class="x" data-i="'+i+'" aria-label="Quitar paso">✕</button></div>').join('');
+  document.querySelectorAll('#pasos input[type=text]').forEach(el=>el.oninput=()=>{t.pasos[+el.dataset.i].texto=el.value;guardar(t);});
+  document.querySelectorAll('#pasos input[type=checkbox]').forEach(el=>el.onchange=()=>{t.pasos[+el.dataset.i].hecho=el.checked;guardar(t);pintarPasos(t);});
+  document.querySelectorAll('#pasos .x').forEach(x=>x.onclick=()=>{if(t.pasos[+x.dataset.i].texto&&!confirm('¿Quitar este paso?'))return;t.pasos.splice(+x.dataset.i,1);guardar(t);pintarPasos(t);});
+}
+function pintarMats(t){
+  $('#mats').innerHTML=t.materiales.map((m,i)=>'<div class="mat"><input type="checkbox" data-i="'+i+'"'+(m.listo?' checked':'')+' aria-label="En obra"><input type="text" class="'+(m.listo?'hecho':'')+'" placeholder="Material" data-i="'+i+'" data-c="nombre" value="'+esc(m.nombre)+'">'+
+    '<input type="text" inputmode="decimal" placeholder="Cant." data-i="'+i+'" data-c="cantidad" value="'+esc(m.cantidad)+'">'+
+    '<select data-i="'+i+'" data-c="unidad">'+MAT_UNID.map(u=>'<option'+(u===m.unidad?' selected':'')+'>'+esc(u)+'</option>').join('')+'</select>'+
+    '<button class="x" data-i="'+i+'" aria-label="Quitar material">✕</button></div>').join('');
+  document.querySelectorAll('#mats input[type=text],#mats select').forEach(el=>el.oninput=()=>{t.materiales[+el.dataset.i][el.dataset.c]=el.value;guardar(t);});
+  document.querySelectorAll('#mats input[type=checkbox]').forEach(el=>el.onchange=()=>{t.materiales[+el.dataset.i].listo=el.checked;guardar(t);pintarMats(t);});
+  document.querySelectorAll('#mats .x').forEach(x=>x.onclick=()=>{if(t.materiales[+x.dataset.i].nombre&&!confirm('¿Quitar este material?'))return;t.materiales.splice(+x.dataset.i,1);guardar(t);pintarMats(t);});
 }
 function pintarMeds(t){
   $('#meds').innerHTML=t.medidas.map((m,i)=>'<div class="med"><input type="text" placeholder="Qué se midió" data-i="'+i+'" data-c="nombre" value="'+esc(m.nombre)+'">'+
@@ -341,6 +372,9 @@ function textoLista(){
     g[k].forEach(t=>{s+=marca[t.estado]+' '+t.titulo+'\n';
       if(t.detalle)s+='    Hacer: '+t.detalle.replace(/\n/g,' ')+'\n';
       if(t.respuesta)s+='    Respuesta: '+t.respuesta.replace(/\n/g,' ')+'\n';
+      if(t.pasos.length)s+='    Pasos: '+t.pasos.map(x=>(x.hecho?'[x] ':'[ ] ')+x.texto).join('; ')+'\n';
+      if(t.materiales.length)s+='    Materiales: '+t.materiales.map(x=>x.nombre+(x.cantidad?' '+x.cantidad+(x.unidad==='otro'?'':' '+x.unidad):'')+(x.listo?' (en obra)':' (falta)')).join('; ')+'\n';
+      const pm=t.medidas.filter(x=>x.valor===''&&x.nombre);if(pm.length)s+='    Por medir: '+pm.map(x=>x.nombre).join('; ')+'\n';
       const m=t.medidas.filter(x=>x.valor!=='');if(m.length)s+='    Medidas: '+m.map(x=>(x.nombre?x.nombre+' ':'')+x.valor+(x.unidad==='otro'?'':' '+x.unidad)).join('; ')+'\n';
       const e=[];if(t.responsable)e.push('Responsable: '+t.responsable);if(t.limite)e.push('Límite: '+fecha(t.limite));if(t.fotos.length)e.push(t.fotos.length+' foto(s)');
       const u=t.historial[t.historial.length-1];if(u)e.push('Cambio: '+fecha(u.fecha)+(u.nota?' ('+u.nota+')':''));
@@ -372,7 +406,7 @@ $('#inArch').onchange=async e=>{
   if(modoArch==='restaurar'){await dbClear('tareas');await dbClear('fotos');await dbClear('proyectos');proyectos=[];tareas=[];}
   let nt=0;
   for(const p of d.proyectos||[]){ if(!proyectos.some(x=>x.id===p.id)){await dbPut('proyectos',p);proyectos.push(p);} }
-  for(const t of d.tareas){ if(!t||!t.id)continue; t.medidas=t.medidas||[];t.fotos=t.fotos||[];t.historial=t.historial||[];
+  for(const t of d.tareas){ if(!t||!t.id)continue; norm(t);
     const i=tareas.findIndex(x=>x.id===t.id);
     if(i<0){tareas.push(t);await dbPut('tareas',t);nt++;}
     else if((t.actualizado||'')>(tareas[i].actualizado||'')){tareas[i]=t;await dbPut('tareas',t);nt++;} }
