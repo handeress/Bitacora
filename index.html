@@ -104,7 +104,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='1.0 · fase 1';
+const VERSION='1.1 · fase 1';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas'},
   {id:'silvania',nombre:'Silvania'},
@@ -199,6 +199,7 @@ async function vistaTareas(){
   const mr=await dbGet('meta','respaldo');
   const dias=mr?Math.floor((Date.now()-new Date(mr.v))/864e5):null;
   if(tareas.length&&(dias===null||dias>7)) h+='<div class="aviso">'+(dias===null?'Todavía no has hecho respaldo.':'Hace '+dias+' días que no haces respaldo.')+' Ve a Más → Respaldar.</div>';
+  if(instalar) h+='<div class="aviso" style="display:flex;gap:10px;align-items:center"><span style="flex:1">Instala Bitácora en la pantalla del celular.</span><button class="btn" id="bInst">Instalar</button></div>';
   const chip=(k,txt,c)=>'<button class="chip'+(S.filtro===k?' on':'')+'" data-f="'+k+'">'+txt+'<b>'+c+'</b></button>';
   h+='<div class="chips">'+chip('abiertas','Abiertas',n.abiertas)+chip('pendiente','Pendientes',n.pendiente)+chip('proceso','En proceso',n.proceso)+chip('terminado','Terminadas',n.terminado)+chip('todas','Todas',todas.length)+'</div>';
   if(todas.length>6||q) h+='<input type="search" id="bus" placeholder="Buscar" value="'+esc(S.q)+'">';
@@ -219,6 +220,7 @@ async function vistaTareas(){
   });
   $('#main').innerHTML=h;
   const add=async()=>{const i=$('#rap');const v=i.value.trim();if(!v)return;await nuevaTarea({titulo:v});i.value='';toast('Anotado');vistaTareas().then(()=>$('#rap').focus());};
+  const bi=$('#bInst'); if(bi) bi.onclick=async()=>{const ev=instalar; if(!ev)return; ev.prompt(); try{await ev.userChoice;}catch(e){} instalar=null; vistaTareas();};
   $('#rapOk').onclick=add; $('#rap').onkeydown=e=>{if(e.key==='Enter')add();};
   document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{S.filtro=c.dataset.f;vistaTareas();});
   document.querySelectorAll('.fila').forEach(f=>f.onclick=()=>{S.tarea=f.dataset.id;S.vista='ficha';pintar();window.scrollTo(0,0);});
@@ -379,6 +381,11 @@ $('#inArch').onchange=async e=>{
   if(!proyectos.some(p=>p.id===S.proy))S.proy=proyectos[0].id;
   toast(modoArch==='restaurar'?'Restaurado: '+tareas.length+' tareas':nt+' tareas sumadas o actualizadas'); pintar();
 };
+
+/* ---------- instalación ---------- */
+let instalar=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();instalar=e;if(S.vista==='tareas'&&db)vistaTareas();});
+window.addEventListener('appinstalled',()=>{instalar=null;toast('App instalada');if(S.vista==='tareas')vistaTareas();});
 
 /* ---------- navegación ---------- */
 document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{S.vista=b.dataset.v;pintar();window.scrollTo(0,0);});
