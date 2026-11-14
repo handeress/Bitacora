@@ -110,7 +110,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='1.2 · fase 1';
+const VERSION='2.0 · fase 2';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas'},
   {id:'silvania',nombre:'Silvania'},
@@ -121,6 +121,7 @@ const TEMAS=['Medidas para compras','Revisar','Corregir','Definir','Hacer','Sin 
 const UNIDADES=['m','cm','mm','m²','m³','und','kg','"','otro'];
 const MAT_UNID=['und','m','m²','m³','kg','bulto','gl','otro'];
 const norm=t=>{t.medidas=t.medidas||[];t.fotos=t.fotos||[];t.historial=t.historial||[];t.pasos=t.pasos||[];t.materiales=t.materiales||[];return t;};
+const GH={dueno:'handeress',repo:'Bitacora-datos'};
 const ESTADOS={pendiente:'Pendiente',proceso:'En proceso',terminado:'Terminado'};
 
 /* ---------- base de datos ---------- */
@@ -171,7 +172,9 @@ async function iniciar(){
   tareas=(await dbAll('tareas')).map(norm);
   const m=await dbGet('meta','proy'); S.proy=(m&&proyectos.some(p=>p.id===m.v))?m.v:proyectos[0].id;
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
-  pintar();
+  sinc.token=((await dbGet('meta','token'))||{}).v||''; sinc.aplicadas=((await dbGet('meta','entrada'))||{}).v||[];
+  sinc.ultimo=((await dbGet('meta','sinc'))||{}).v||''; sinc.firma=((await dbGet('meta','firma'))||{}).v||'';
+  pintar(); sincronizar();
 }
 
 /* ---------- pintar ---------- */
@@ -240,12 +243,12 @@ async function vistaTareas(){
 async function nuevaTarea(d){
   const t=Object.assign({id:uid(),proyecto:S.proy,tema:'Sin clasificar',titulo:'',detalle:'',estado:'pendiente',respuesta:'',medidas:[],pasos:[],materiales:[],fotos:[],responsable:'',limite:'',
     creado:ahora(),actualizado:ahora(),historial:[]},d);
-  tareas.push(t); await dbPut('tareas',t); return t;
+  tareas.push(t); await dbPut('tareas',t); programar(); return t;
 }
 
 /* ---------- ficha ---------- */
 let guardarT;
-function guardar(t){ t.actualizado=ahora(); clearTimeout(guardarT); guardarT=setTimeout(()=>dbPut('tareas',t),300); }
+function guardar(t){ t.actualizado=ahora(); clearTimeout(guardarT); guardarT=setTimeout(()=>dbPut('tareas',t),300); programar(); }
 function vistaFicha(){
   const t=tareas.find(x=>x.id===S.tarea); if(!t){S.vista='tareas';return pintar();}
   $('#cab').innerHTML='<button class="atras" id="atras" aria-label="Volver">←</button><h1>'+esc(nombreProy(t.proyecto))+'</h1>';
@@ -275,7 +278,7 @@ function vistaFicha(){
   $('#masMed').onclick=()=>{t.medidas.push({nombre:'',valor:'',unidad:'m'});guardar(t);pintarMeds(t);const f=document.querySelectorAll('#meds .med input');if(f.length)f[f.length-2].focus();};
   $('#bCam').onclick=()=>$('#inCam').click(); $('#bGal').onclick=()=>$('#inGal').click();
   $('#bDup').onclick=async()=>{const c=await nuevaTarea({proyecto:t.proyecto,tema:t.tema,titulo:t.titulo+' (copia)',detalle:t.detalle,responsable:t.responsable,pasos:t.pasos.map(x=>({texto:x.texto,hecho:false})),materiales:t.materiales.map(x=>({...x,listo:false}))});liberar();S.tarea=c.id;pintar();window.scrollTo(0,0);toast('Duplicada');};
-  $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);cerrarFicha();toast('Borrada');};
+  $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);programar();cerrarFicha();toast('Borrada');};
 }
 function liberar(){S.urls.forEach(u=>URL.revokeObjectURL(u));S.urls=[];}
 function cerrarFicha(){const t=tareas.find(x=>x.id===S.tarea);if(t){clearTimeout(guardarT);dbPut('tareas',t);}liberar();S.vista='tareas';S.tarea=null;pintar();}
@@ -349,12 +352,17 @@ async function vistaMas(){
   const mr=await dbGet('meta','respaldo');
   const nf=(await tx('fotos','readonly',o=>o.count()))||0;
   let h='<div class="tarj"><h3>Lista para el chat</h3><p>Copia las tareas de '+esc(nombreProy(S.proy))+' como texto, con estado, respuestas y medidas, para pegarlas en el chat de Claude.</p><button class="btn" id="bTxt">Copiar lista</button></div>';
+  h+='<div class="tarj"><h3>Sincronización con Claude</h3><p id="sEst">'+esc(estadoSinc())+'</p>'+
+     '<input type="password" id="tok" autocomplete="off" placeholder="'+(sinc.token?'Llave guardada. Pega otra para cambiarla':'Pega aquí la llave de GitHub')+'">'+
+     '<button class="btn sec" id="bTok">Guardar llave</button><button class="btn" id="bSinc">Sincronizar ahora</button></div>';
   h+='<div class="tarj"><h3>Respaldo</h3><p>'+tareas.length+' tareas y '+nf+' fotos en este celular. '+(mr?'Último respaldo: '+fechaHora(mr.v)+'.':'Sin respaldo todavía.')+'</p>'+
      '<button class="btn" id="bResp">Respaldar (guardar en Drive)</button><button class="btn sec" id="bSum">Sumar datos desde archivo</button><button class="btn pel" id="bRest">Restaurar (reemplaza todo)</button></div>';
   h+='<div class="tarj"><h3>Proyectos</h3>'+proyectos.map(p=>'<div class="proy"><span>'+esc(p.nombre)+' <small>'+esc(p.id)+'</small></span><button class="chip" data-p="'+esc(p.id)+'">'+(p.estado==='cerrado'?'Cerrado':'Activo')+'</button></div>').join('')+
      '<div class="rapida" style="margin-top:10px"><input type="text" id="nProy" placeholder="Nuevo proyecto"><button class="btn" id="nProyOk">+</button></div></div>';
   h+='<p style="text-align:center;color:var(--gris);font-size:13px">Bitácora de obra · versión '+VERSION+'</p>';
   $('#main').innerHTML=h;
+  $('#bTok').onclick=async()=>{const v=$('#tok').value.trim();if(!v)return toast('Pega primero la llave');sinc.token=v;await dbPut('meta',{k:'token',v});$('#tok').value='';toast('Llave guardada');await sincronizar(true);};
+  $('#bSinc').onclick=()=>sincronizar(true);
   $('#bTxt').onclick=copiarLista; $('#bResp').onclick=respaldar;
   $('#bSum').onclick=()=>{modoArch='sumar';$('#inArch').click();};
   $('#bRest').onclick=()=>{if(confirm('Restaurar borra TODO lo que hay en este celular y lo reemplaza por el archivo. ¿Seguir?')){modoArch='restaurar';$('#inArch').click();}};
@@ -398,19 +406,86 @@ async function respaldar(){
   if(!hecho){const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=nombre;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
   await dbPut('meta',{k:'respaldo',v:ahora()}); toast('Respaldo listo'); if(S.vista==='mas')vistaMas();
 }
+async function sumarDatos(d){
+  let nt=0;
+  for(const p of d.proyectos||[]){ if(p&&p.id&&!proyectos.some(x=>x.id===p.id)){await dbPut('proyectos',p);proyectos.push(p);} }
+  for(const t of d.tareas||[]){ if(!t||!t.id)continue; norm(t); t.estado=ESTADOS[t.estado]?t.estado:'pendiente'; t.creado=t.creado||ahora(); t.actualizado=t.actualizado||t.creado;
+    t.titulo=t.titulo||'';t.detalle=t.detalle||'';t.respuesta=t.respuesta||'';t.tema=t.tema||'Sin clasificar';t.responsable=t.responsable||'';t.limite=t.limite||'';
+    const i=tareas.findIndex(x=>x.id===t.id);
+    if(i<0){tareas.push(t);await dbPut('tareas',t);nt++;}
+    else if((t.actualizado||'')>(tareas[i].actualizado||'')){tareas[i]=t;await dbPut('tareas',t);nt++;} }
+  for(const ft of d.fotos||[]){ if(!ft.data||await dbGet('fotos',ft.id))continue; const blob=await (await fetch(ft.data)).blob(); await dbPut('fotos',{id:ft.id,tarea:ft.tarea,fecha:ft.fecha,blob}); }
+  return nt;
+}
+
+/* ---------- sincronización con el repositorio de datos ---------- */
+const sinc={token:'',aplicadas:[],ultimo:'',firma:'',error:'',ocupado:false};
+let sincT;
+function programar(){ clearTimeout(sincT); sincT=setTimeout(()=>sincronizar(),15000); }
+function estadoSinc(){
+  if(!sinc.token) return 'Sin llave: la app no está enviando nada a Claude.';
+  if(sinc.ocupado) return 'Sincronizando…';
+  if(sinc.error) return 'No se pudo sincronizar: '+sinc.error+(sinc.ultimo?' Última vez bien: '+fechaHora(sinc.ultimo)+'.':'');
+  return sinc.ultimo?'Al día. Última sincronización: '+fechaHora(sinc.ultimo)+'.':'Llave guardada. Todavía no ha sincronizado.';
+}
+function b64txt(str){const b=new TextEncoder().encode(str);let s='';for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s);}
+function hashTxt(s){let x=5381;for(let i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return s.length+':'+x;}
+function gh(ruta,opt){
+  opt=opt||{};
+  return fetch('https://api.github.com/repos/'+GH.dueno+'/'+GH.repo+'/contents/'+ruta.split('/').map(encodeURIComponent).join('/'),
+    {method:opt.method||'GET',body:opt.body,cache:'no-store',headers:Object.assign({'Authorization':'Bearer '+sinc.token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},opt.headers||{})});
+}
+function falla(r){
+  if(r.status===401) return new Error('la llave no sirve o venció.');
+  if(r.status===403||r.status===404) return new Error('la llave no tiene permiso sobre '+GH.repo+'.');
+  return new Error('GitHub respondió '+r.status+'.');
+}
+async function sincronizar(manual){
+  if(!sinc.token){ if(manual)toast('Falta la llave'); return; }
+  if(sinc.ocupado) return;
+  if(!navigator.onLine){ if(manual)toast('Sin internet'); return; }
+  sinc.ocupado=true; clearTimeout(sincT); let entraron=0;
+  const ver=()=>{const e=$('#sEst'); if(e) e.textContent=estadoSinc();}; ver();
+  try{
+    // 1. Lo que Claude dejó para la app
+    const l=await gh('claude/entrada');
+    if(l.status===200){
+      const arch=(await l.json()).filter(x=>x.type==='file'&&/\.json$/.test(x.name)).sort((a,b)=>a.name<b.name?-1:1);
+      for(const f of arch){ if(sinc.aplicadas.includes(f.name))continue;
+        const r=await gh('claude/entrada/'+f.name,{headers:{'Accept':'application/vnd.github.raw+json'}}); if(!r.ok)throw falla(r);
+        let d; try{d=JSON.parse(await r.text());}catch(e){d=null;}
+        if(d&&d.app==='bitacora') entraron+=await sumarDatos(d);
+        sinc.aplicadas.push(f.name); await dbPut('meta',{k:'entrada',v:sinc.aplicadas}); }
+    } else if(l.status===401) throw falla(l);
+    // 2. Fotos nuevas
+    for(const f of await dbAll('fotos')){ if(f.subida||!tareas.some(t=>t.id===f.tarea))continue;
+      const data=(await aData(f.blob)).split(',')[1];
+      const r=await gh('app/fotos/'+f.id+'.jpg',{method:'PUT',body:JSON.stringify({message:'foto '+f.id,content:data})});
+      if(!r.ok&&r.status!==422) throw falla(r);
+      f.subida=true; await dbPut('fotos',f); }
+    // 3. Estado de las tareas (solo si cambió)
+    const cuerpo=JSON.stringify({proyectos,tareas}); const firma=hashTxt(cuerpo);
+    if(firma!==sinc.firma){
+      let sha; const g=await gh('app/tareas.json'); if(g.status===200)sha=(await g.json()).sha; else if(g.status!==404)throw falla(g);
+      const txt=JSON.stringify({app:'bitacora',formato:1,fecha:ahora(),proyectos,tareas},null,1);
+      const r=await gh('app/tareas.json',{method:'PUT',body:JSON.stringify({message:'tareas '+hoy(),content:b64txt(txt),sha})}); if(!r.ok)throw falla(r);
+      sinc.firma=firma; await dbPut('meta',{k:'firma',v:firma}); }
+    sinc.ultimo=ahora(); sinc.error=''; await dbPut('meta',{k:'sinc',v:sinc.ultimo});
+    if(manual||entraron) toast(entraron?entraron+(entraron===1?' tarea nueva de Claude':' tareas nuevas de Claude'):'Sincronizado');
+  }catch(e){ sinc.error=(e&&e.message)||'error de red.'; if(manual)toast('No se pudo sincronizar'); }
+  sinc.ocupado=false; ver();
+  if(entraron&&S.vista==='tareas') vistaTareas();
+}
+window.addEventListener('online',()=>sincronizar());
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') sincronizar(); });
+
 let modoArch='sumar';
 $('#inArch').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f)return;
   let d; try{d=JSON.parse(await f.text());}catch(x){return toast('El archivo no se pudo leer');}
   if(!d||d.app!=='bitacora'||!Array.isArray(d.tareas))return toast('No es un respaldo de Bitácora');
   if(modoArch==='restaurar'){await dbClear('tareas');await dbClear('fotos');await dbClear('proyectos');proyectos=[];tareas=[];}
-  let nt=0;
-  for(const p of d.proyectos||[]){ if(!proyectos.some(x=>x.id===p.id)){await dbPut('proyectos',p);proyectos.push(p);} }
-  for(const t of d.tareas){ if(!t||!t.id)continue; norm(t);
-    const i=tareas.findIndex(x=>x.id===t.id);
-    if(i<0){tareas.push(t);await dbPut('tareas',t);nt++;}
-    else if((t.actualizado||'')>(tareas[i].actualizado||'')){tareas[i]=t;await dbPut('tareas',t);nt++;} }
-  for(const ft of d.fotos||[]){ if(!ft.data||await dbGet('fotos',ft.id))continue; const blob=await (await fetch(ft.data)).blob(); await dbPut('fotos',{id:ft.id,tarea:ft.tarea,fecha:ft.fecha,blob}); }
+  const nt=await sumarDatos(d);
   if(!proyectos.length){for(const p of PROY_BASE){const o={...p,estado:'activo'};await dbPut('proyectos',o);proyectos.push(o);}}
   if(!proyectos.some(p=>p.id===S.proy))S.proy=proyectos[0].id;
   toast(modoArch==='restaurar'?'Restaurado: '+tareas.length+' tareas':nt+' tareas sumadas o actualizadas'); pintar();

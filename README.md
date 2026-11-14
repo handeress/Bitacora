@@ -12,9 +12,14 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - Copiar la lista del proyecto como texto para pegarla en el chat.
 - Respaldo completo en un archivo `.json` (con fotos), sumar datos y restaurar.
 
+## Fase 2 (en curso)
+
+- Ficha con pasos, materiales y medidas por tomar.
+- Sincronización con el repo privado `Bitacora-datos` (llave de GitHub guardada solo en el celular): la app sube `app/tareas.json` y `app/fotos/<id>.jpg`, y suma lo que Claude deja en `claude/entrada/*.json` (mismo formato del respaldo).
+
 ## Pendiente
 
-- Fase 2: buzón de Claude (listas de visita preparadas en el chat) y modo visita.
+- Modo visita.
 - Fase 3: diario, cierre del día e informe PDF.
 
 ## Archivos
