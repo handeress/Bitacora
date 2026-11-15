@@ -25,6 +25,8 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - Cambio de proyecto desde la ficha de la tarea.
 - Diario: línea de tiempo por obra con tareas nuevas, cambios de estado y visitas.
 
+- Las entradas de Claude pueden traer `"borrar": [ids]` para quitar tareas (desde la versión 3.1).
+
 ## Pendiente
 
 - Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).

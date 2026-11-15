@@ -121,7 +121,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='3.0 · fase 3';
+const VERSION='3.1 · fase 3';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -497,6 +497,8 @@ async function sumarDatos(d){
     if(i<0){tareas.push(t);await dbPut('tareas',t);nt++;}
     else if((t.actualizado||'')>(tareas[i].actualizado||'')){tareas[i]=t;await dbPut('tareas',t);nt++;} }
   for(const ft of d.fotos||[]){ if(!ft.data||await dbGet('fotos',ft.id))continue; const blob=await (await fetch(ft.data)).blob(); await dbPut('fotos',{id:ft.id,tarea:ft.tarea,fecha:ft.fecha,blob}); }
+  for(const id of d.borrar||[]){ const i=tareas.findIndex(x=>x.id===id); if(i<0)continue;
+    for(const f of tareas[i].fotos||[]) await dbDel('fotos',f); await dbDel('tareas',id); tareas.splice(i,1); nt++; }
   for(const v of d.visitas||[]){ if(!v||!v.id||visitas.some(x=>x.id===v.id))continue; v.revisadas=v.revisadas||[];v.nuevas=v.nuevas||[]; visitas.push(v); await dbPut('visitas',v); }
   return nt;
 }
