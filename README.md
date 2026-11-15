@@ -32,6 +32,12 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - Tipo de tarea (lo que sigue), prioridad, sesión de trabajo y marca Para Claude; barra de filtros en una fila con paneles.
 - Entradas nuevas de Claude en `claude/buzon/` con `"min"` (versión mínima de formato; hoy 4) y `"cambios": [{id, campos, nota}]` para cambiar solo algunos campos de una tarea.
 
+## Versión 5.0
+
+- La tarea es un elemento que se completa instalado en obra. Etapas con tipo (incluye Transportar); el tipo de la tarea y el estado se calculan de la primera etapa sin hacer (estado se puede fijar a mano y volver a automático). Plantillas de etapas.
+- `docs`: enlaces a planos y documentos en Drive (el archivo vive solo en Drive; la tarea guarda el enlace).
+- Buzón con `"min": 5` para usar etapas con tipo y `docs`.
+
 ## Pendiente
 
 - Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).

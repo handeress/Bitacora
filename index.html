@@ -64,7 +64,12 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 .med{display:grid;grid-template-columns:1fr 84px 76px 40px;gap:6px;margin-bottom:6px}
 .med input,.med select{min-height:44px;padding:9px 8px}
 .med .x{background:none;border:0;color:var(--gris);font-size:20px}
-.paso{display:grid;grid-template-columns:44px 1fr 40px;gap:6px;margin-bottom:6px;align-items:center}
+.paso{display:grid;grid-template-columns:40px 1fr 96px 32px;gap:5px;margin-bottom:6px;align-items:center}
+.paso select{min-height:44px;padding:6px 4px;font-size:13px;background:var(--hoja);border:1px solid var(--linea);border-radius:10px}
+.docs a{display:block;padding:11px 12px;background:var(--hoja);border:1px solid var(--linea);border-radius:10px;margin-bottom:6px;color:var(--tinta);text-decoration:none;font-weight:600}
+.docs a small{display:block;color:var(--gris);font-weight:400}
+.auto{font-size:13px;color:var(--gris);margin:6px 2px 0;display:flex;justify-content:space-between;align-items:center}
+.auto button{background:none;border:0;color:var(--acento);font-weight:600;padding:6px 0}
 .mat{display:grid;grid-template-columns:44px 1fr 62px 74px 36px;gap:5px;margin-bottom:6px;align-items:center}
 .paso input[type=text],.mat input[type=text],.mat select{min-height:44px;padding:9px 8px}
 .paso input[type=checkbox],.mat input[type=checkbox]{width:26px;height:26px;margin:0 auto;accent-color:var(--term)}
@@ -136,7 +141,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='4.0';
+const VERSION='5.0';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -148,9 +153,12 @@ const colorProy=id=>(proyectos.find(p=>p.id===id)||{}).color||'#c2410c';
 const TEMAS=['Medidas para compras','Revisar','Corregir','Definir','Hacer','Sin clasificar'];
 const UNIDADES=['m','cm','mm','m²','m³','und','kg','"','otro'];
 const MAT_UNID=['und','m','m²','m³','kg','bulto','gl','otro'];
-const norm=t=>{t.medidas=t.medidas||[];t.fotos=t.fotos||[];t.historial=t.historial||[];t.pasos=t.pasos||[];t.materiales=t.materiales||[];t.tipo=t.tipo||'';t.prioridad=t.prioridad||'';t.sesion=!!t.sesion;t.claude=!!t.claude;return t;};
-const FORMATO=4;
-const TIPOS=[['comprar','Comprar','Comprar'],['fabricar','Mandar a fabricar','Fabricar'],['armar','Armar en taller','Armar'],['construir','Construir en obra','Construir'],['planos','Hacer planos','Planos'],['medir','Tomar medidas','Medir'],['definir','Definir especificaciones','Definir'],['revisar','Revisar en obra','Revisar']];
+const norm=t=>{t.medidas=t.medidas||[];t.fotos=t.fotos||[];t.historial=t.historial||[];t.pasos=t.pasos||[];t.materiales=t.materiales||[];t.tipo=t.tipo||'';t.prioridad=t.prioridad||'';t.sesion=!!t.sesion;t.claude=!!t.claude;t.estadoFijo=!!t.estadoFijo;t.docs=t.docs||[];t.pasos.forEach(p=>{p.tipo=p.tipo||'';});return t;};
+function autoEtapas(t){ if(!t.pasos.length) return; const pend=t.pasos.find(p=>!p.hecho);
+  if(t.pasos.some(p=>p.tipo)){ if(pend&&pend.tipo) t.tipo=pend.tipo; else if(!pend){ const u=[...t.pasos].reverse().find(p=>p.tipo); if(u) t.tipo=u.tipo; } }
+  if(t.estadoFijo) return; const n=t.pasos.filter(p=>p.hecho).length; t.estado=n===0?'pendiente':(n===t.pasos.length?'terminado':'proceso'); }
+const FORMATO=5;
+const TIPOS=[['comprar','Comprar','Comprar'],['fabricar','Mandar a fabricar','Fabricar'],['armar','Armar en taller','Armar'],['transportar','Transportar','Transportar'],['construir','Construir en obra','Construir'],['planos','Hacer planos','Planos'],['medir','Tomar medidas','Medir'],['definir','Definir especificaciones','Definir'],['revisar','Revisar en obra','Revisar']];
 const tipoNom=(k,c)=>{const x=TIPOS.find(y=>y[0]===k);return x?x[c?2:1]:'';};
 const GH={dueno:'handeress',repo:'Bitacora-datos'};
 const ESTADOS={pendiente:'Pendiente',proceso:'En proceso',terminado:'Terminado'};
@@ -280,7 +288,8 @@ async function vistaTareas(){
       if(t.estado==='proceso') s.push('En proceso');
       if(t.responsable) s.push(esc(t.responsable));
       if(t.limite) s.push('<span class="'+(vencida(t)?'venc':'')+'">'+(vencida(t)?'Venció ':'Para ')+fecha(t.limite)+'</span>');
-      if(t.pasos.length) s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' pasos');
+      if(t.pasos.length){ const sg=t.pasos.find(x=>!x.hecho); s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' etapas'+(sg&&sg.texto?' · Sigue: '+esc(sg.texto):'')); }
+      if(t.docs.length) s.push(t.docs.length+(t.docs.length===1?' plano':' planos'));
       const pm=t.medidas.filter(m=>m.valor===''&&m.nombre).length; if(pm) s.push(pm+' por medir');
       const fm=t.materiales.filter(m=>!m.listo).length; if(fm) s.push(fm+(fm===1?' material falta':' materiales faltan'));
       const nm=t.medidas.filter(m=>m.valor!=='').length; if(nm) s.push(nm+(nm===1?' medida':' medidas'));
@@ -308,7 +317,7 @@ async function vistaTareas(){
 }
 async function nuevaTarea(d){
   const t=Object.assign({id:uid(),proyecto:S.proy,tema:'Sin clasificar',titulo:'',detalle:'',estado:'pendiente',respuesta:'',tipo:'',prioridad:'',sesion:false,claude:false,medidas:[],pasos:[],materiales:[],fotos:[],responsable:'',limite:'',
-    creado:ahora(),actualizado:ahora(),historial:[]},d);
+    creado:ahora(),actualizado:ahora(),historial:[]},d); norm(t);
   tareas.push(t); await dbPut('tareas',t); programar(); return t;
 }
 
@@ -320,17 +329,18 @@ function vistaFicha(){
   $('#cab').innerHTML='<button class="atras" id="atras" aria-label="Volver">←</button><h1>'+esc(nombreProy(t.proyecto))+'</h1>';
   $('#atras').onclick=cerrarFicha;
   $('#main').innerHTML=
-    '<div class="seg" id="seg"></div>'+
+    '<div class="seg" id="seg"></div><div class="auto" id="autoEst"></div>'+
     '<input type="text" id="nota" placeholder="Nota del cambio de estado (opcional)" style="margin-top:6px">'+
     '<label class="et" for="fTit">Tarea</label><input type="text" id="fTit" value="'+esc(t.titulo)+'">'+
     '<label class="et" for="fTema">Tema</label><input type="text" id="fTema" list="temas" value="'+esc(t.tema)+'"><datalist id="temas">'+
       [...new Set(TEMAS.concat(tareas.map(x=>x.tema).filter(Boolean)))].map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist>'+
     '<label class="et" for="fProy">Proyecto</label><select id="fProy" class="campo">'+proyectos.map(p=>'<option value="'+esc(p.id)+'"'+(p.id===t.proyecto?' selected':'')+'>'+esc(p.nombre)+'</option>').join('')+'</select>'+
-    '<div class="dos"><div><label class="et" for="fTipo2">Tipo (lo que sigue)</label><select id="fTipo2" class="campo"><option value="">Sin tipo</option>'+TIPOS.map(x=>'<option value="'+x[0]+'"'+(x[0]===t.tipo?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></div></div>'+
+    '<div class="dos"><div><label class="et" for="fTipo2">Tipo (lo que sigue)'+(t.pasos.some(p=>p.tipo)?' · según etapas':'')+'</label><select id="fTipo2" class="campo"'+(t.pasos.some(p=>p.tipo)?' disabled':'')+'><option value="">Sin tipo</option>'+TIPOS.map(x=>'<option value="'+x[0]+'"'+(x[0]===t.tipo?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></div></div>'+
     '<label class="et">Prioridad</label><div class="seg" id="segPri"></div>'+
     '<div class="chips" style="margin-top:8px"><button class="chip" id="mSes"></button><button class="chip" id="mCla"></button></div>'+
     '<label class="et" for="fDet">Qué hay que hacer</label><textarea id="fDet">'+esc(t.detalle)+'</textarea>'+
-    '<label class="et">Pasos</label><div id="pasos"></div><button class="btn sec" id="masPaso">+ Paso</button>'+
+    '<label class="et">Etapas hasta dejarlo instalado</label><div id="pasos"></div><div class="dos"><button class="btn sec" id="masPaso">+ Etapa</button><select id="plant" class="campo"><option value="">Plantilla…</option>'+Object.keys(PLANTILLAS).map(k=>'<option value="'+k+'">'+PLANTILLAS[k][0]+'</option>').join('')+'</select></div>'+
+    '<label class="et">Planos y documentos</label><div class="docs" id="docs"></div><button class="btn sec" id="masDoc" style="width:100%">+ Enlace de Drive</button>'+
     '<label class="et">Materiales (chulo = ya está en obra)</label><div id="mats"></div><button class="btn sec" id="masMat">+ Material</button>'+
     '<label class="et" for="fRes">Respuesta / observación</label><textarea id="fRes">'+esc(t.respuesta)+'</textarea>'+
     '<label class="et">Medidas (sin valor = falta medir)</label><div id="meds"></div><button class="btn sec" id="masMed">+ Medida</button>'+
@@ -349,12 +359,15 @@ function vistaFicha(){
   $('#mSes').onclick=()=>{t.sesion=!t.sesion;guardar(t);pMar();}; $('#mCla').onclick=()=>{t.claude=!t.claude;guardar(t);pMar();};
   pPri();pMar();
   pintarSeg(t);pintarPasos(t);pintarMats(t);pintarMeds(t);
-  $('#masPaso').onclick=()=>{t.pasos.push({texto:'',hecho:false});guardar(t);pintarPasos(t);const f=document.querySelectorAll('#pasos input[type=text]');f[f.length-1].focus();};
+  $('#plant').onchange=e=>{const k=e.target.value;if(!k)return;PLANTILLAS[k][1].forEach(x=>t.pasos.push({texto:x[0],tipo:x[1],hecho:false}));e.target.value='';cambioEtapas(t);pintarPasos(t);toast('Etapas agregadas');};
+  $('#masDoc').onclick=()=>{const u=prompt('Pega el enlace del archivo en Drive');if(!u)return;const n=prompt('Nombre (ej.: Suesca_vidrios_rev1)')||'Documento';t.docs.push({nombre:n.trim(),url:u.trim()});guardar(t);pintarDocs(t);};
+  pintarDocs(t);
+  $('#masPaso').onclick=()=>{t.pasos.push({texto:'',tipo:'',hecho:false});guardar(t);pintarPasos(t);const f=document.querySelectorAll('#pasos input[type=text]');f[f.length-1].focus();};
   $('#masMat').onclick=()=>{t.materiales.push({nombre:'',cantidad:'',unidad:'und',listo:false});guardar(t);pintarMats(t);const f=document.querySelectorAll('#mats input[data-c=nombre]');f[f.length-1].focus();};
   pintarFotos(t);pintarHist(t);
   $('#masMed').onclick=()=>{t.medidas.push({nombre:'',valor:'',unidad:'m'});guardar(t);pintarMeds(t);const f=document.querySelectorAll('#meds .med input');if(f.length)f[f.length-2].focus();};
   $('#bCam').onclick=()=>$('#inCam').click(); $('#bGal').onclick=()=>$('#inGal').click();
-  $('#bDup').onclick=async()=>{const c=await nuevaTarea({proyecto:t.proyecto,tema:t.tema,titulo:t.titulo+' (copia)',detalle:t.detalle,responsable:t.responsable,pasos:t.pasos.map(x=>({texto:x.texto,hecho:false})),materiales:t.materiales.map(x=>({...x,listo:false}))});liberar();S.tarea=c.id;pintar();window.scrollTo(0,0);toast('Duplicada');};
+  $('#bDup').onclick=async()=>{const c=await nuevaTarea({proyecto:t.proyecto,tema:t.tema,titulo:t.titulo+' (copia)',detalle:t.detalle,responsable:t.responsable,pasos:t.pasos.map(x=>({texto:x.texto,tipo:x.tipo,hecho:false})),docs:t.docs.map(x=>({...x})),materiales:t.materiales.map(x=>({...x,listo:false}))});liberar();S.tarea=c.id;pintar();window.scrollTo(0,0);toast('Duplicada');};
   $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);programar();cerrarFicha();toast('Borrada');};
 }
 function liberar(){S.urls.forEach(u=>URL.revokeObjectURL(u));S.urls=[];}
@@ -364,14 +377,30 @@ function pintarSeg(t){
   document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
     const e=b.dataset.e; if(e===t.estado)return;
     t.historial.push({fecha:ahora(),de:t.estado,a:e,nota:$('#nota').value.trim()});
-    t.estado=e;$('#nota').value='';guardar(t);pintarSeg(t);pintarHist(t);toast(ESTADOS[e]);
+    t.estado=e;if(t.pasos.length)t.estadoFijo=true;$('#nota').value='';guardar(t);pintarSeg(t);pintarHist(t);toast(ESTADOS[e]);
   });
+  const a=$('#autoEst'); if(a) a.innerHTML=t.pasos.length?(t.estadoFijo?'<span>Estado puesto a mano</span><button id="bAuto">Volver a automático</button>':'<span>Estado automático según las etapas</span>'):'';
+  const b=$('#bAuto'); if(b) b.onclick=()=>{const de=t.estado;t.estadoFijo=false;autoEtapas(t);if(t.estado!==de)t.historial.push({fecha:ahora(),de,a:t.estado,nota:'Vuelve a automático'});guardar(t);pintarSeg(t);pintarHist(t);};
 }
+function cambioEtapas(t){ const de=t.estado; autoEtapas(t); if(t.estado!==de) t.historial.push({fecha:ahora(),de,a:t.estado,nota:'Automático por etapas'}); guardar(t); pintarSeg(t); pintarHist(t); const ft=$('#fTipo2'); if(ft){ft.value=t.tipo;ft.disabled=t.pasos.some(p=>p.tipo);} }
 function pintarPasos(t){
-  $('#pasos').innerHTML=t.pasos.map((p,i)=>'<div class="paso"><input type="checkbox" data-i="'+i+'"'+(p.hecho?' checked':'')+' aria-label="Hecho"><input type="text" class="'+(p.hecho?'hecho':'')+'" placeholder="Paso" data-i="'+i+'" value="'+esc(p.texto)+'"><button class="x" data-i="'+i+'" aria-label="Quitar paso">✕</button></div>').join('');
+  $('#pasos').innerHTML=t.pasos.map((p,i)=>'<div class="paso"><input type="checkbox" data-i="'+i+'"'+(p.hecho?' checked':'')+' aria-label="Hecha"><input type="text" class="'+(p.hecho?'hecho':'')+'" placeholder="Etapa" data-i="'+i+'" value="'+esc(p.texto)+'">'+
+    '<select data-i="'+i+'" aria-label="Tipo de la etapa"><option value="">Tipo</option>'+TIPOS.map(x=>'<option value="'+x[0]+'"'+(x[0]===p.tipo?' selected':'')+'>'+x[2]+'</option>').join('')+'</select>'+
+    '<button class="x" data-i="'+i+'" aria-label="Quitar etapa">✕</button></div>').join('');
   document.querySelectorAll('#pasos input[type=text]').forEach(el=>el.oninput=()=>{t.pasos[+el.dataset.i].texto=el.value;guardar(t);});
-  document.querySelectorAll('#pasos input[type=checkbox]').forEach(el=>el.onchange=()=>{t.pasos[+el.dataset.i].hecho=el.checked;guardar(t);pintarPasos(t);});
-  document.querySelectorAll('#pasos .x').forEach(x=>x.onclick=()=>{if(t.pasos[+x.dataset.i].texto&&!confirm('¿Quitar este paso?'))return;t.pasos.splice(+x.dataset.i,1);guardar(t);pintarPasos(t);});
+  document.querySelectorAll('#pasos select').forEach(el=>el.onchange=()=>{t.pasos[+el.dataset.i].tipo=el.value;cambioEtapas(t);});
+  document.querySelectorAll('#pasos input[type=checkbox]').forEach(el=>el.onchange=()=>{const p=t.pasos[+el.dataset.i];p.hecho=el.checked;t.historial.push({fecha:ahora(),paso:p.texto,hecho:p.hecho});cambioEtapas(t);pintarPasos(t);});
+  document.querySelectorAll('#pasos .x').forEach(x=>x.onclick=()=>{if(t.pasos[+x.dataset.i].texto&&!confirm('¿Quitar esta etapa?'))return;t.pasos.splice(+x.dataset.i,1);cambioEtapas(t);pintarPasos(t);});
+}
+const PLANTILLAS={
+  compra:['Compra con instalación',[['Definir especificación','definir'],['Comprar','comprar'],['Transportar a obra','transportar'],['Instalar en obra','construir'],['Revisar y recibir','revisar']]],
+  mueble:['Mueble de taller',[['Fabricar piezas','armar'],['Armar en taller','armar'],['Transportar a obra','transportar'],['Instalar en obra','construir'],['Revisar y recibir','revisar']]],
+  sitio:['Obra en sitio',[['Medir en obra','medir'],['Comprar material','comprar'],['Transportar material','transportar'],['Construir','construir'],['Revisar y recibir','revisar']]],
+  metal:['Fabricación metálica',[['Hacer planos','planos'],['Comprar perfiles','comprar'],['Mandar a fabricar','fabricar'],['Transportar a obra','transportar'],['Instalar en obra','construir'],['Revisar y recibir','revisar']]]
+};
+function pintarDocs(t){
+  $('#docs').innerHTML=t.docs.map((d,i)=>'<div class="dos" style="align-items:center"><a href="'+esc(d.url)+'" target="_blank" rel="noopener">'+esc(d.nombre||'Documento')+(d.nota?'<small>'+esc(d.nota)+'</small>':'')+'</a><button class="x" data-i="'+i+'" style="flex:none;width:40px;background:none;border:0;color:var(--gris);font-size:20px" aria-label="Quitar">✕</button></div>').join('')||'<div class="s" style="color:var(--gris);font-size:14px">Sin planos ni documentos.</div>';
+  document.querySelectorAll('#docs .x').forEach(x=>x.onclick=()=>{if(!confirm('¿Quitar este enlace? El archivo sigue en Drive.'))return;t.docs.splice(+x.dataset.i,1);guardar(t);pintarDocs(t);});
 }
 function pintarMats(t){
   $('#mats').innerHTML=t.materiales.map((m,i)=>'<div class="mat"><input type="checkbox" data-i="'+i+'"'+(m.listo?' checked':'')+' aria-label="En obra"><input type="text" class="'+(m.listo?'hecho':'')+'" placeholder="Material" data-i="'+i+'" data-c="nombre" value="'+esc(m.nombre)+'">'+
@@ -400,7 +429,7 @@ async function pintarFotos(t){
 }
 function pintarHist(t){
   let h='<div class="hist">Creada el <b>'+fechaHora(t.creado)+'</b>'+(t.origen?' · '+esc(t.origen):'')+'</div>';
-  t.historial.forEach(x=>{h+='<div class="hist"><b>'+fechaHora(x.fecha)+'</b> · '+ESTADOS[x.de]+' → <b>'+ESTADOS[x.a]+'</b>'+(x.nota?'<br>'+esc(x.nota):'')+'</div>';});
+  t.historial.forEach(x=>{h+='<div class="hist"><b>'+fechaHora(x.fecha)+'</b> · '+(x.paso!==undefined?(x.hecho?'Etapa hecha: ':'Etapa reabierta: ')+'<b>'+esc(x.paso)+'</b>':ESTADOS[x.de]+' → <b>'+ESTADOS[x.a]+'</b>')+(x.nota?'<br>'+esc(x.nota):'')+'</div>';});
   $('#hist').innerHTML=h;
 }
 $('#visor').onclick=()=>$('#visor').classList.remove('on');
@@ -409,7 +438,7 @@ $('#visor').onclick=()=>$('#visor').classList.remove('on');
 const visitaActiva=p=>visitas.find(v=>!v.fin&&v.proyecto===(p||S.proy));
 function infoTarea(t){
   const s=[t.tema]; if(tipoNom(t.tipo))s.push(tipoNom(t.tipo)); if(t.estado==='proceso')s.push('En proceso'); if(t.estado==='terminado')s.push('Terminado');
-  if(t.pasos.length)s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' pasos');
+  if(t.pasos.length){ const sg=t.pasos.find(x=>!x.hecho); s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' etapas'+(sg&&sg.texto?' · Sigue: '+sg.texto:'')); }
   const pm=t.medidas.filter(m=>m.valor===''&&m.nombre).length; if(pm)s.push(pm+' por medir');
   const fm=t.materiales.filter(m=>!m.listo).length; if(fm)s.push(fm+(fm===1?' material falta':' materiales faltan'));
   return s.map(esc).join(' · ');
@@ -455,7 +484,7 @@ function vistaDiario(){
   const ev=[];
   delProyecto().forEach(t=>{
     ev.push({f:t.creado,id:t.id,a:'Tarea nueva'+(t.origen?' · '+t.origen:''),b:t.titulo});
-    t.historial.forEach(x=>ev.push({f:x.fecha,id:t.id,a:ESTADOS[x.de]+' → '+ESTADOS[x.a]+(x.nota?' · '+x.nota:''),b:t.titulo}));
+    t.historial.forEach(x=>ev.push({f:x.fecha,id:t.id,a:(x.paso!==undefined?(x.hecho?'Etapa hecha: ':'Etapa reabierta: ')+x.paso:ESTADOS[x.de]+' → '+ESTADOS[x.a])+(x.nota?' · '+x.nota:''),b:t.titulo}));
   });
   visitas.filter(v=>v.proyecto===S.proy).forEach(v=>ev.push({f:v.inicio,b:'Visita de obra'+(v.fin?'':' (abierta)'),a:[v.clima,v.personal,v.revisadas.length+' revisadas',v.nuevas.length+' nuevas'].filter(Boolean).join(' · ')+(v.nota?' · '+v.nota:'')}));
   ev.sort((x,y)=>x.f<y.f?1:-1);
@@ -523,7 +552,8 @@ function textoLista(){
       const mk=[];if(tipoNom(t.tipo))mk.push('Tipo: '+tipoNom(t.tipo));if(t.prioridad)mk.push('Prioridad '+t.prioridad);if(t.sesion)mk.push('En sesión');if(t.claude)mk.push('Para Claude');if(mk.length)s+='    '+mk.join(' · ')+'\n';
       if(t.detalle)s+='    Hacer: '+t.detalle.replace(/\n/g,' ')+'\n';
       if(t.respuesta)s+='    Respuesta: '+t.respuesta.replace(/\n/g,' ')+'\n';
-      if(t.pasos.length)s+='    Pasos: '+t.pasos.map(x=>(x.hecho?'[x] ':'[ ] ')+x.texto).join('; ')+'\n';
+      if(t.pasos.length)s+='    Etapas: '+t.pasos.map(x=>(x.hecho?'[x] ':'[ ] ')+x.texto+(tipoNom(x.tipo)?' ('+tipoNom(x.tipo,1)+')':'')).join('; ')+'\n';
+      if(t.docs.length)s+='    Planos: '+t.docs.map(x=>x.nombre).join('; ')+'\n';
       if(t.materiales.length)s+='    Materiales: '+t.materiales.map(x=>x.nombre+(x.cantidad?' '+x.cantidad+(x.unidad==='otro'?'':' '+x.unidad):'')+(x.listo?' (en obra)':' (falta)')).join('; ')+'\n';
       const pm=t.medidas.filter(x=>x.valor===''&&x.nombre);if(pm.length)s+='    Por medir: '+pm.map(x=>x.nombre).join('; ')+'\n';
       const m=t.medidas.filter(x=>x.valor!=='');if(m.length)s+='    Medidas: '+m.map(x=>(x.nombre?x.nombre+' ':'')+x.valor+(x.unidad==='otro'?'':' '+x.unidad)).join('; ')+'\n';
@@ -559,7 +589,7 @@ async function sumarDatos(d){
     else if((t.actualizado||'')>(tareas[i].actualizado||'')){tareas[i]=t;await dbPut('tareas',t);nt++;} }
   for(const ft of d.fotos||[]){ if(!ft.data||await dbGet('fotos',ft.id))continue; const blob=await (await fetch(ft.data)).blob(); await dbPut('fotos',{id:ft.id,tarea:ft.tarea,fecha:ft.fecha,blob}); }
   for(const c of d.cambios||[]){ const t=tareas.find(x=>x.id===(c&&c.id)); if(!t||!c.campos)continue;
-    const de=t.estado; Object.assign(t,c.campos); t.id=c.id; norm(t); if(!ESTADOS[t.estado])t.estado=de;
+    const de=t.estado; Object.assign(t,c.campos); t.id=c.id; norm(t); if(!ESTADOS[t.estado])t.estado=de; if(!('estado' in c.campos)) autoEtapas(t);
     if(t.estado!==de) t.historial.push({fecha:ahora(),de,a:t.estado,nota:c.nota||'Cambio desde el chat'});
     t.actualizado=ahora(); await dbPut('tareas',t); nt++; }
   for(const id of d.borrar||[]){ const i=tareas.findIndex(x=>x.id===id); if(i<0)continue;
