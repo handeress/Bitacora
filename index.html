@@ -101,6 +101,21 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 .vf .abre{flex:1;display:flex;gap:11px;align-items:flex-start;background:none;border:0;text-align:left;padding:12px;min-height:56px}
 .vf .rev{flex:none;width:56px;border:0;border-left:1px solid var(--linea);background:none;font-size:22px;color:var(--linea)}
 .vf .rev.on{background:var(--term);color:#fff}
+.barra{display:grid;grid-template-columns:1.5fr 1.2fr 1fr 44px;gap:6px;margin-bottom:8px}
+.barra button{background:var(--hoja);border:1px solid var(--linea);border-radius:10px;min-height:42px;padding:6px 5px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.barra button.on{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+.panel{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--hoja);border:1px solid var(--linea);border-radius:12px;padding:8px;margin-bottom:10px}
+.panel button{display:flex;justify-content:space-between;gap:6px;text-align:left;background:none;border:1px solid var(--linea);border-radius:8px;padding:9px 10px;min-height:42px;font-size:14px}
+.panel button.on{background:var(--tinta);color:#fff;border-color:var(--tinta)}
+.panel .sep{grid-column:1/-1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gris);margin:4px 2px 0}
+.vf .ses{flex:none;width:50px;border:0;border-left:1px solid var(--linea);background:none;font-size:22px;color:var(--linea)}
+.vf .ses.on{color:var(--acento)}
+.pri{color:var(--rojo);font-size:11px;font-weight:800;letter-spacing:.06em;margin-right:6px}
+.fila.baja .t{font-weight:500}
+.lin{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--gris);margin:0 2px 8px}
+.lin button{background:none;border:0;color:var(--acento);font-weight:600;padding:8px 0}
+.seg button.on[data-p]{background:var(--tinta)}
+.seg button.on[data-p=alta]{background:var(--rojo)}
 .oculto{display:none!important}
 </style>
 </head>
@@ -121,7 +136,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='3.1 · fase 3';
+const VERSION='4.0';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -133,7 +148,10 @@ const colorProy=id=>(proyectos.find(p=>p.id===id)||{}).color||'#c2410c';
 const TEMAS=['Medidas para compras','Revisar','Corregir','Definir','Hacer','Sin clasificar'];
 const UNIDADES=['m','cm','mm','m²','m³','und','kg','"','otro'];
 const MAT_UNID=['und','m','m²','m³','kg','bulto','gl','otro'];
-const norm=t=>{t.medidas=t.medidas||[];t.fotos=t.fotos||[];t.historial=t.historial||[];t.pasos=t.pasos||[];t.materiales=t.materiales||[];return t;};
+const norm=t=>{t.medidas=t.medidas||[];t.fotos=t.fotos||[];t.historial=t.historial||[];t.pasos=t.pasos||[];t.materiales=t.materiales||[];t.tipo=t.tipo||'';t.prioridad=t.prioridad||'';t.sesion=!!t.sesion;t.claude=!!t.claude;return t;};
+const FORMATO=4;
+const TIPOS=[['comprar','Comprar','Comprar'],['fabricar','Mandar a fabricar','Fabricar'],['armar','Armar en taller','Armar'],['construir','Construir en obra','Construir'],['planos','Hacer planos','Planos'],['medir','Tomar medidas','Medir'],['definir','Definir especificaciones','Definir'],['revisar','Revisar en obra','Revisar']];
+const tipoNom=(k,c)=>{const x=TIPOS.find(y=>y[0]===k);return x?x[c?2:1]:'';};
 const GH={dueno:'handeress',repo:'Bitacora-datos'};
 const ESTADOS={pendiente:'Pendiente',proceso:'En proceso',terminado:'Terminado'};
 
@@ -163,7 +181,7 @@ const dbClear=s=>tx(s,'readwrite',o=>o.clear());
 
 /* ---------- estado ---------- */
 let proyectos=[], tareas=[], visitas=[];
-const S={vista:'tareas', proy:'', filtro:'abiertas', q:'', tarea:null, urls:[]};
+const S={vista:'tareas', proy:'', filtro:'abiertas', tipo:'todos', sesion:false, marca:'', panel:'', buscar:false, q:'', tarea:null, urls:[]};
 const $=s=>document.querySelector(s);
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
@@ -210,31 +228,55 @@ function cabecera(){
 /* ---------- lista de tareas ---------- */
 function delProyecto(){return tareas.filter(t=>t.proyecto===S.proy);}
 function vencida(t){return t.limite&&t.estado!=='terminado'&&t.limite<hoy();}
+function guardarSimple(t){ t.actualizado=ahora(); dbPut('tareas',t); programar(); }
 async function vistaTareas(){
   const todas=delProyecto();
   const n={abiertas:0,pendiente:0,proceso:0,terminado:0};
   todas.forEach(t=>{n[t.estado]++; if(t.estado!=='terminado') n.abiertas++;});
-  let lista=todas.filter(t=>S.filtro==='todas'||(S.filtro==='abiertas'?t.estado!=='terminado':t.estado===S.filtro));
+  const base=todas.filter(t=>S.filtro==='todas'||(S.filtro==='abiertas'?t.estado!=='terminado':t.estado===S.filtro));
+  const nt={sin:0}; TIPOS.forEach(x=>nt[x[0]]=0); base.forEach(t=>{ if(nt[t.tipo]===undefined||!t.tipo) nt.sin++; else nt[t.tipo]++; });
+  let lista=base;
+  if(S.tipo!=='todos') lista=lista.filter(t=>S.tipo==='sin'?!tipoNom(t.tipo):t.tipo===S.tipo);
+  if(S.sesion) lista=lista.filter(t=>t.sesion);
+  if(S.marca==='alta') lista=lista.filter(t=>t.prioridad==='alta');
+  if(S.marca==='claude') lista=lista.filter(t=>t.claude);
   const q=S.q.trim().toLowerCase();
-  if(q) lista=lista.filter(t=>(t.titulo+' '+t.detalle+' '+t.respuesta+' '+t.tema+' '+t.responsable).toLowerCase().includes(q));
+  if(q) lista=lista.filter(t=>(t.titulo+' '+t.detalle+' '+t.respuesta+' '+t.tema+' '+t.responsable+' '+tipoNom(t.tipo)).toLowerCase().includes(q));
+  const nSes=todas.filter(t=>t.sesion).length;
   const grupos={};
   lista.forEach(t=>{(grupos[t.tema||'Sin clasificar']=grupos[t.tema||'Sin clasificar']||[]).push(t);});
-  const orden=Object.keys(grupos).sort((a,b)=>{const ia=TEMAS.indexOf(a),ib=TEMAS.indexOf(b);return (ia<0?50:ia)-(ib<0?50:ib)||a.localeCompare(b);});
-  const peso={proceso:0,pendiente:1,terminado:2};
+  const orden=Object.keys(grupos).sort((x,y)=>{const ia=TEMAS.indexOf(x),ib=TEMAS.indexOf(y);return (ia<0?50:ia)-(ib<0?50:ib)||x.localeCompare(y);});
+  const peso={proceso:0,pendiente:1,terminado:2}, pp={alta:0,'':1,baja:2};
   let h='<div class="rapida"><input type="text" id="rap" placeholder="Anotar tarea rápida…" enterkeyhint="done" autocomplete="off"><button class="btn" id="rapOk">+</button></div>';
-  const mr=await dbGet('meta','respaldo');
-  const dias=mr?Math.floor((Date.now()-new Date(mr.v))/864e5):null;
-  if(tareas.length&&(dias===null||dias>7)) h+='<div class="aviso">'+(dias===null?'Todavía no has hecho respaldo.':'Hace '+dias+' días que no haces respaldo.')+' Ve a Más → Respaldar.</div>';
   if(instalar) h+='<div class="aviso" style="display:flex;gap:10px;align-items:center"><span style="flex:1">Instala Bitácora en la pantalla del celular.</span><button class="btn" id="bInst">Instalar</button></div>';
-  const chip=(k,txt,c)=>'<button class="chip'+(S.filtro===k?' on':'')+'" data-f="'+k+'">'+txt+'<b>'+c+'</b></button>';
-  h+='<div class="chips">'+chip('abiertas','Abiertas',n.abiertas)+chip('pendiente','Pendientes',n.pendiente)+chip('proceso','En proceso',n.proceso)+chip('terminado','Terminadas',n.terminado)+chip('todas','Todas',todas.length)+'</div>';
-  if(todas.length>6||q) h+='<input type="search" id="bus" placeholder="Buscar" value="'+esc(S.q)+'">';
-  if(!lista.length) h+='<div class="vacio">'+(todas.length?'Nada con este filtro.':'Sin tareas en '+esc(nombreProy(S.proy))+'.<br>Anota la primera arriba.')+'</div>';
+  if(sinc.pide) h+='<div class="aviso">Claude dejó datos que necesitan la versión nueva de la app. Ciérrala y ábrela dos veces con internet.</div>';
+  if(!(sinc.token&&!sinc.error)&&tareas.length){
+    const mr=await dbGet('meta','respaldo'); const dias=mr?Math.floor((Date.now()-new Date(mr.v))/864e5):null;
+    if(dias===null||dias>7) h+='<div class="aviso">'+(dias===null?'Sin sincronización ni respaldo todavía.':'Hace '+dias+' días que no haces respaldo.')+' Ve a Más.</div>';
+  }
+  const EN={abiertas:'Abiertas',pendiente:'Pendientes',proceso:'En proceso',terminado:'Terminadas',todas:'Todas'};
+  const cEst=S.filtro==='todas'?todas.length:n[S.filtro];
+  h+='<div class="barra"><button id="fEst" class="'+(S.panel==='estado'||S.marca?'on':'')+'">'+EN[S.filtro]+' <b>'+cEst+'</b>'+(S.marca?' ·':'')+' ▾</button>'+
+     '<button id="fTipo" class="'+(S.panel==='tipo'||S.tipo!=='todos'?'on':'')+'">'+(S.tipo==='todos'?'Tipo':S.tipo==='sin'?'Sin tipo':tipoNom(S.tipo,1))+' ▾</button>'+
+     '<button id="fSes" class="'+(S.sesion?'on':'')+'">Sesión <b>'+nSes+'</b></button>'+
+     '<button id="fBus" class="'+(S.buscar||q?'on':'')+'" aria-label="Buscar">🔍</button></div>';
+  const op=(g,k,txt,c,on)=>'<button data-g="'+g+'" data-k="'+k+'" class="'+(on?'on':'')+'"><span>'+txt+'</span><b>'+c+'</b></button>';
+  if(S.panel==='estado'){
+    h+='<div class="panel">'+['abiertas','pendiente','proceso','terminado','todas'].map(k=>op('e',k,EN[k],k==='todas'?todas.length:n[k],S.filtro===k)).join('')+
+       '<div class="sep">Marcas</div>'+op('m','alta','Prioridad alta',base.filter(t=>t.prioridad==='alta').length,S.marca==='alta')+op('m','claude','Para Claude',base.filter(t=>t.claude).length,S.marca==='claude')+'</div>';
+  }
+  if(S.panel==='tipo'){
+    h+='<div class="panel">'+op('t','todos','Todos',base.length,S.tipo==='todos')+TIPOS.map(x=>op('t',x[0],x[1],nt[x[0]],S.tipo===x[0])).join('')+op('t','sin','Sin tipo',nt.sin,S.tipo==='sin')+'</div>';
+  }
+  if(S.buscar||q) h+='<input type="search" id="bus" placeholder="Buscar" value="'+esc(S.q)+'" style="margin-bottom:8px">';
+  if(S.sesion) h+='<div class="lin"><span>Sesión de trabajo: '+nSes+(nSes===1?' tarea':' tareas')+'</span>'+(nSes?'<button id="vacSes">Vaciar sesión</button>':'')+'</div>';
+  if(!lista.length) h+='<div class="vacio">'+(todas.length?(S.sesion&&!nSes?'La sesión está vacía.<br>Toca la estrella de las tareas que vas a trabajar.':'Nada con este filtro.'):'Sin tareas en '+esc(nombreProy(S.proy))+'.<br>Anota la primera arriba.')+'</div>';
   orden.forEach(g=>{
-    const ts=grupos[g].sort((a,b)=>peso[a.estado]-peso[b.estado]||(a.creado<b.creado?-1:1));
+    const ts=grupos[g].sort((x,y)=>pp[x.prioridad]-pp[y.prioridad]||peso[x.estado]-peso[y.estado]||(x.creado<y.creado?-1:1));
     h+='<h2 class="tema"><span>'+esc(g)+'</span><span>'+ts.length+'</span></h2>';
     ts.forEach(t=>{
       const s=[];
+      if(tipoNom(t.tipo)) s.push(tipoNom(t.tipo));
       if(t.estado==='proceso') s.push('En proceso');
       if(t.responsable) s.push(esc(t.responsable));
       if(t.limite) s.push('<span class="'+(vencida(t)?'venc':'')+'">'+(vencida(t)?'Venció ':'Para ')+fecha(t.limite)+'</span>');
@@ -243,20 +285,29 @@ async function vistaTareas(){
       const fm=t.materiales.filter(m=>!m.listo).length; if(fm) s.push(fm+(fm===1?' material falta':' materiales faltan'));
       const nm=t.medidas.filter(m=>m.valor!=='').length; if(nm) s.push(nm+(nm===1?' medida':' medidas'));
       if((t.fotos||[]).length) s.push(t.fotos.length+(t.fotos.length===1?' foto':' fotos'));
-      if(t.respuesta&&!s.length) s.push(esc(t.respuesta.slice(0,60)));
-      h+='<button class="fila '+t.estado+'" data-id="'+t.id+'"><span class="punto '+t.estado+'"></span><span><div class="t">'+esc(t.titulo||'(sin título)')+'</div>'+(s.length?'<div class="s">'+s.join(' · ')+'</div>':'')+'</span></button>';
+      if(t.claude) s.push('Para Claude');
+      h+='<div class="fila vf '+t.estado+(t.prioridad==='baja'?' baja':'')+'"><button class="abre" data-id="'+t.id+'"><span class="punto '+t.estado+'"></span><span><div class="t">'+(t.prioridad==='alta'?'<span class="pri">ALTA</span>':'')+esc(t.titulo||'(sin título)')+'</div>'+(s.length?'<div class="s">'+s.join(' · ')+'</div>':'')+'</span></button><button class="ses'+(t.sesion?' on':'')+'" data-id="'+t.id+'" aria-label="En la sesión">'+(t.sesion?'★':'☆')+'</button></div>';
     });
   });
   $('#main').innerHTML=h;
-  const add=async()=>{const i=$('#rap');const v=i.value.trim();if(!v)return;await nuevaTarea({titulo:v});i.value='';toast('Anotado');vistaTareas().then(()=>$('#rap').focus());};
+  const re=()=>{const y=window.scrollY;return vistaTareas().then(()=>window.scrollTo(0,y));};
+  const add=async()=>{const i=$('#rap');const v=i.value.trim();if(!v)return;await nuevaTarea({titulo:v,tipo:tipoNom(S.tipo)?S.tipo:'',sesion:S.sesion});i.value='';toast('Anotado');vistaTareas().then(()=>$('#rap').focus());};
   const bi=$('#bInst'); if(bi) bi.onclick=async()=>{const ev=instalar; if(!ev)return; ev.prompt(); try{await ev.userChoice;}catch(e){} instalar=null; vistaTareas();};
   $('#rapOk').onclick=add; $('#rap').onkeydown=e=>{if(e.key==='Enter')add();};
-  document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{S.filtro=c.dataset.f;vistaTareas();});
-  document.querySelectorAll('.fila').forEach(f=>f.onclick=()=>{S.tarea=f.dataset.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);});
-  const b=$('#bus'); if(b) b.oninput=()=>{S.q=b.value;clearTimeout(b._t);b._t=setTimeout(()=>vistaTareas().then(()=>{const x=$('#bus');if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length);}}),350);};
+  $('#fEst').onclick=()=>{S.panel=S.panel==='estado'?'':'estado';re();};
+  $('#fTipo').onclick=()=>{S.panel=S.panel==='tipo'?'':'tipo';re();};
+  $('#fSes').onclick=()=>{S.sesion=!S.sesion;S.panel='';re();};
+  $('#fBus').onclick=()=>{S.buscar=!S.buscar;if(!S.buscar)S.q='';S.panel='';vistaTareas().then(()=>{const x=$('#bus');if(x)x.focus();});};
+  document.querySelectorAll('.panel button').forEach(c=>c.onclick=()=>{const g=c.dataset.g,k=c.dataset.k;
+    if(g==='e'){S.filtro=k;S.panel='';} else if(g==='t'){S.tipo=k;S.panel='';} else {S.marca=S.marca===k?'':k;}
+    vistaTareas();});
+  const vs=$('#vacSes'); if(vs) vs.onclick=()=>{if(!confirm('¿Sacar todas las tareas de la sesión? Las tareas no se borran.'))return;todas.filter(t=>t.sesion).forEach(t=>{t.sesion=false;guardarSimple(t);});S.sesion=false;vistaTareas();};
+  document.querySelectorAll('.vf .abre').forEach(f=>f.onclick=()=>{S.tarea=f.dataset.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);});
+  document.querySelectorAll('.vf .ses').forEach(f=>f.onclick=()=>{const t=tareas.find(x=>x.id===f.dataset.id);t.sesion=!t.sesion;guardarSimple(t);re();});
+  const bq=$('#bus'); if(bq) bq.oninput=()=>{S.q=bq.value;clearTimeout(bq._t);bq._t=setTimeout(()=>vistaTareas().then(()=>{const x=$('#bus');if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length);}}),350);};
 }
 async function nuevaTarea(d){
-  const t=Object.assign({id:uid(),proyecto:S.proy,tema:'Sin clasificar',titulo:'',detalle:'',estado:'pendiente',respuesta:'',medidas:[],pasos:[],materiales:[],fotos:[],responsable:'',limite:'',
+  const t=Object.assign({id:uid(),proyecto:S.proy,tema:'Sin clasificar',titulo:'',detalle:'',estado:'pendiente',respuesta:'',tipo:'',prioridad:'',sesion:false,claude:false,medidas:[],pasos:[],materiales:[],fotos:[],responsable:'',limite:'',
     creado:ahora(),actualizado:ahora(),historial:[]},d);
   tareas.push(t); await dbPut('tareas',t); programar(); return t;
 }
@@ -275,6 +326,9 @@ function vistaFicha(){
     '<label class="et" for="fTema">Tema</label><input type="text" id="fTema" list="temas" value="'+esc(t.tema)+'"><datalist id="temas">'+
       [...new Set(TEMAS.concat(tareas.map(x=>x.tema).filter(Boolean)))].map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist>'+
     '<label class="et" for="fProy">Proyecto</label><select id="fProy" class="campo">'+proyectos.map(p=>'<option value="'+esc(p.id)+'"'+(p.id===t.proyecto?' selected':'')+'>'+esc(p.nombre)+'</option>').join('')+'</select>'+
+    '<div class="dos"><div><label class="et" for="fTipo2">Tipo (lo que sigue)</label><select id="fTipo2" class="campo"><option value="">Sin tipo</option>'+TIPOS.map(x=>'<option value="'+x[0]+'"'+(x[0]===t.tipo?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></div></div>'+
+    '<label class="et">Prioridad</label><div class="seg" id="segPri"></div>'+
+    '<div class="chips" style="margin-top:8px"><button class="chip" id="mSes"></button><button class="chip" id="mCla"></button></div>'+
     '<label class="et" for="fDet">Qué hay que hacer</label><textarea id="fDet">'+esc(t.detalle)+'</textarea>'+
     '<label class="et">Pasos</label><div id="pasos"></div><button class="btn sec" id="masPaso">+ Paso</button>'+
     '<label class="et">Materiales (chulo = ya está en obra)</label><div id="mats"></div><button class="btn sec" id="masMat">+ Material</button>'+
@@ -288,6 +342,12 @@ function vistaFicha(){
   const liga=(id,campo)=>{$(id).oninput=e=>{t[campo]=e.target.value;guardar(t);};};
   liga('#fTit','titulo');liga('#fTema','tema');liga('#fDet','detalle');liga('#fRes','respuesta');liga('#fResp','responsable');liga('#fLim','limite');
   $('#fProy').onchange=e=>{t.proyecto=e.target.value;guardar(t);$('#cab h1').textContent=nombreProy(t.proyecto);document.documentElement.style.setProperty('--proy',colorProy(t.proyecto));toast('Movida a '+nombreProy(t.proyecto));};
+  $('#fTipo2').onchange=e=>{t.tipo=e.target.value;guardar(t);};
+  const pPri=()=>{$('#segPri').innerHTML=[['alta','Alta'],['','Normal'],['baja','Baja']].map(x=>'<button data-p="'+x[0]+'" class="'+(t.prioridad===x[0]?'on':'')+'">'+x[1]+'</button>').join('');
+    document.querySelectorAll('#segPri button').forEach(b=>b.onclick=()=>{t.prioridad=b.dataset.p;guardar(t);pPri();});};
+  const pMar=()=>{$('#mSes').textContent=(t.sesion?'★ En la sesión':'☆ Agregar a la sesión');$('#mSes').classList.toggle('on',t.sesion);$('#mCla').textContent=(t.claude?'✓ Para Claude':'Para Claude');$('#mCla').classList.toggle('on',t.claude);};
+  $('#mSes').onclick=()=>{t.sesion=!t.sesion;guardar(t);pMar();}; $('#mCla').onclick=()=>{t.claude=!t.claude;guardar(t);pMar();};
+  pPri();pMar();
   pintarSeg(t);pintarPasos(t);pintarMats(t);pintarMeds(t);
   $('#masPaso').onclick=()=>{t.pasos.push({texto:'',hecho:false});guardar(t);pintarPasos(t);const f=document.querySelectorAll('#pasos input[type=text]');f[f.length-1].focus();};
   $('#masMat').onclick=()=>{t.materiales.push({nombre:'',cantidad:'',unidad:'und',listo:false});guardar(t);pintarMats(t);const f=document.querySelectorAll('#mats input[data-c=nombre]');f[f.length-1].focus();};
@@ -348,7 +408,7 @@ $('#visor').onclick=()=>$('#visor').classList.remove('on');
 /* ---------- visita ---------- */
 const visitaActiva=p=>visitas.find(v=>!v.fin&&v.proyecto===(p||S.proy));
 function infoTarea(t){
-  const s=[t.tema]; if(t.estado==='proceso')s.push('En proceso'); if(t.estado==='terminado')s.push('Terminado');
+  const s=[t.tema]; if(tipoNom(t.tipo))s.push(tipoNom(t.tipo)); if(t.estado==='proceso')s.push('En proceso'); if(t.estado==='terminado')s.push('Terminado');
   if(t.pasos.length)s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' pasos');
   const pm=t.medidas.filter(m=>m.valor===''&&m.nombre).length; if(pm)s.push(pm+' por medir');
   const fm=t.materiales.filter(m=>!m.listo).length; if(fm)s.push(fm+(fm===1?' material falta':' materiales faltan'));
@@ -363,10 +423,10 @@ function vistaVisita(){
     else h+='<h2 class="tema"><span>Visitas anteriores</span><span>'+ant.length+'</span></h2>';
     ant.forEach(x=>{h+='<div class="tarj"><h3>'+fechaHora(x.inicio)+'</h3><p>'+[x.clima,x.personal].filter(Boolean).map(esc).join(' · ')+(x.clima||x.personal?'<br>':'')+x.revisadas.length+' tareas revisadas · '+x.nuevas.length+' nuevas'+(x.nota?'<br>'+esc(x.nota):'')+'</p></div>';});
     $('#main').innerHTML=h;
-    $('#vIni').onclick=async()=>{const n={id:uid(),proyecto:S.proy,inicio:ahora(),fin:'',clima:'',personal:'',nota:'',revisadas:[],nuevas:[]};visitas.push(n);await dbPut('visitas',n);programar();vistaVisita();};
+    $('#vIni').onclick=async()=>{const ss=delProyecto().filter(t=>t.sesion&&t.estado!=='terminado');const solo=ss.length&&confirm('Hay '+ss.length+' tareas en la sesión. ¿Hacer la visita solo con esas?\n(Cancelar = todas las abiertas)')?ss.map(t=>t.id):null;const n={id:uid(),proyecto:S.proy,inicio:ahora(),fin:'',clima:'',personal:'',nota:'',revisadas:[],nuevas:[],solo};visitas.push(n);await dbPut('visitas',n);programar();vistaVisita();};
     return;
   }
-  const lista=delProyecto().filter(t=>t.estado!=='terminado'||v.revisadas.includes(t.id)).sort((a,b)=>(v.revisadas.includes(a.id)-v.revisadas.includes(b.id))||(a.tema||'').localeCompare(b.tema||'')||(a.creado<b.creado?-1:1));
+  const lista=delProyecto().filter(t=>v.solo?(v.solo.includes(t.id)||v.nuevas.includes(t.id)):(t.estado!=='terminado'||v.revisadas.includes(t.id))).sort((a,b)=>(v.revisadas.includes(a.id)-v.revisadas.includes(b.id))||(a.tema||'').localeCompare(b.tema||'')||(a.creado<b.creado?-1:1));
   const rv=lista.filter(t=>v.revisadas.includes(t.id)).length;
   h+='<div class="rapida"><input type="text" id="vRap" placeholder="Anotar observación nueva…" enterkeyhint="done" autocomplete="off"><button class="btn" id="vRapOk">+</button></div>';
   h+='<h2 class="tema"><span>Visita del '+fechaHora(v.inicio)+'</span><span>Revisadas '+rv+' de '+lista.length+'</span></h2>';
@@ -460,6 +520,7 @@ function textoLista(){
   const g={}; ts.forEach(t=>(g[t.tema||'Sin clasificar']=g[t.tema||'Sin clasificar']||[]).push(t));
   Object.keys(g).forEach(k=>{s+='\n'+k.toUpperCase()+'\n';
     g[k].forEach(t=>{s+=marca[t.estado]+' '+t.titulo+'\n';
+      const mk=[];if(tipoNom(t.tipo))mk.push('Tipo: '+tipoNom(t.tipo));if(t.prioridad)mk.push('Prioridad '+t.prioridad);if(t.sesion)mk.push('En sesión');if(t.claude)mk.push('Para Claude');if(mk.length)s+='    '+mk.join(' · ')+'\n';
       if(t.detalle)s+='    Hacer: '+t.detalle.replace(/\n/g,' ')+'\n';
       if(t.respuesta)s+='    Respuesta: '+t.respuesta.replace(/\n/g,' ')+'\n';
       if(t.pasos.length)s+='    Pasos: '+t.pasos.map(x=>(x.hecho?'[x] ':'[ ] ')+x.texto).join('; ')+'\n';
@@ -497,6 +558,10 @@ async function sumarDatos(d){
     if(i<0){tareas.push(t);await dbPut('tareas',t);nt++;}
     else if((t.actualizado||'')>(tareas[i].actualizado||'')){tareas[i]=t;await dbPut('tareas',t);nt++;} }
   for(const ft of d.fotos||[]){ if(!ft.data||await dbGet('fotos',ft.id))continue; const blob=await (await fetch(ft.data)).blob(); await dbPut('fotos',{id:ft.id,tarea:ft.tarea,fecha:ft.fecha,blob}); }
+  for(const c of d.cambios||[]){ const t=tareas.find(x=>x.id===(c&&c.id)); if(!t||!c.campos)continue;
+    const de=t.estado; Object.assign(t,c.campos); t.id=c.id; norm(t); if(!ESTADOS[t.estado])t.estado=de;
+    if(t.estado!==de) t.historial.push({fecha:ahora(),de,a:t.estado,nota:c.nota||'Cambio desde el chat'});
+    t.actualizado=ahora(); await dbPut('tareas',t); nt++; }
   for(const id of d.borrar||[]){ const i=tareas.findIndex(x=>x.id===id); if(i<0)continue;
     for(const f of tareas[i].fotos||[]) await dbDel('fotos',f); await dbDel('tareas',id); tareas.splice(i,1); nt++; }
   for(const v of d.visitas||[]){ if(!v||!v.id||visitas.some(x=>x.id===v.id))continue; v.revisadas=v.revisadas||[];v.nuevas=v.nuevas||[]; visitas.push(v); await dbPut('visitas',v); }
@@ -504,7 +569,7 @@ async function sumarDatos(d){
 }
 
 /* ---------- sincronización con el repositorio de datos ---------- */
-const sinc={token:'',aplicadas:[],ultimo:'',firma:'',error:'',ocupado:false};
+const sinc={token:'',aplicadas:[],ultimo:'',firma:'',error:'',ocupado:false,pide:false};
 let sincT;
 function programar(){ clearTimeout(sincT); sincT=setTimeout(()=>sincronizar(),15000); }
 function estadoSinc(){
@@ -533,15 +598,19 @@ async function sincronizar(manual){
   const ver=()=>{const e=$('#sEst'); if(e) e.textContent=estadoSinc();}; ver();
   try{
     // 1. Lo que Claude dejó para la app
-    const l=await gh('claude/entrada');
-    if(l.status===200){
+    sinc.pide=false;
+    for(const dir of ['claude/entrada','claude/buzon']){
+      const l=await gh(dir);
+      if(l.status===401) throw falla(l);
+      if(l.status!==200) continue;
       const arch=(await l.json()).filter(x=>x.type==='file'&&/\.json$/.test(x.name)).sort((a,b)=>a.name<b.name?-1:1);
-      for(const f of arch){ if(sinc.aplicadas.includes(f.name))continue;
-        const r=await gh('claude/entrada/'+f.name,{headers:{'Accept':'application/vnd.github.raw+json'}}); if(!r.ok)throw falla(r);
+      for(const f of arch){ const clave=(dir==='claude/buzon'?'buzon/':'')+f.name; if(sinc.aplicadas.includes(clave))continue;
+        const r=await gh(dir+'/'+f.name,{headers:{'Accept':'application/vnd.github.raw+json'}}); if(!r.ok)throw falla(r);
         let d; try{d=JSON.parse(await r.text());}catch(e){d=null;}
+        if(d&&d.min>FORMATO){ sinc.pide=true; continue; }
         if(d&&d.app==='bitacora') entraron+=await sumarDatos(d);
-        sinc.aplicadas.push(f.name); await dbPut('meta',{k:'entrada',v:sinc.aplicadas}); }
-    } else if(l.status===401) throw falla(l);
+        sinc.aplicadas.push(clave); await dbPut('meta',{k:'entrada',v:sinc.aplicadas}); }
+    }
     // 2. Fotos nuevas
     for(const f of await dbAll('fotos')){ if(f.subida||!tareas.some(t=>t.id===f.tarea))continue;
       const data=(await aData(f.blob)).split(',')[1];

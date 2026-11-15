@@ -27,6 +27,11 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 
 - Las entradas de Claude pueden traer `"borrar": [ids]` para quitar tareas (desde la versión 3.1).
 
+## Versión 4.0
+
+- Tipo de tarea (lo que sigue), prioridad, sesión de trabajo y marca Para Claude; barra de filtros en una fila con paneles.
+- Entradas nuevas de Claude en `claude/buzon/` con `"min"` (versión mínima de formato; hoy 4) y `"cambios": [{id, campos, nota}]` para cambiar solo algunos campos de una tarea.
+
 ## Pendiente
 
 - Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).
