@@ -142,7 +142,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='5.1';
+const VERSION='5.2';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -316,6 +316,8 @@ async function vistaTareas(){
   document.querySelectorAll('.vf .ses').forEach(f=>f.onclick=()=>{const t=tareas.find(x=>x.id===f.dataset.id);t.sesion=!t.sesion;guardarSimple(t);re();});
   const bq=$('#bus'); if(bq) bq.oninput=()=>{S.q=bq.value;clearTimeout(bq._t);bq._t=setTimeout(()=>vistaTareas().then(()=>{const x=$('#bus');if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length);}}),350);};
 }
+function opcTemas(sel){const l=[...new Set(TEMAS.concat(tareas.map(x=>x.tema).filter(Boolean),sel?[sel]:[]))];
+  return l.map(x=>'<option value="'+esc(x)+'"'+(x===sel?' selected':'')+'>'+esc(x)+'</option>').join('')+'<option value="__nuevo">+ Tema nuevo…</option>';}
 async function nuevaTarea(d){
   const t=Object.assign({id:uid(),proyecto:S.proy,tema:'Sin clasificar',titulo:'',detalle:'',estado:'pendiente',respuesta:'',tipo:'',prioridad:'',sesion:false,claude:false,medidas:[],pasos:[],materiales:[],fotos:[],responsable:'',limite:'',
     creado:ahora(),actualizado:ahora(),historial:[]},d); norm(t);
@@ -333,8 +335,7 @@ function vistaFicha(){
     '<div class="seg" id="seg"></div><div class="auto" id="autoEst"></div>'+
     '<input type="text" id="nota" placeholder="Nota del cambio de estado (opcional)" style="margin-top:6px">'+
     '<label class="et" for="fTit">Tarea</label><input type="text" id="fTit" value="'+esc(t.titulo)+'">'+
-    '<label class="et" for="fTema">Tema</label><input type="text" id="fTema" list="temas" value="'+esc(t.tema)+'"><datalist id="temas">'+
-      [...new Set(TEMAS.concat(tareas.map(x=>x.tema).filter(Boolean)))].map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist>'+
+    '<label class="et" for="fTema">Tema</label><select id="fTema" class="campo">'+opcTemas(t.tema)+'</select>'+
     '<label class="et" for="fProy">Proyecto</label><select id="fProy" class="campo">'+proyectos.map(p=>'<option value="'+esc(p.id)+'"'+(p.id===t.proyecto?' selected':'')+'>'+esc(p.nombre)+'</option>').join('')+'</select>'+
     '<div class="dos"><div><label class="et" for="fTipo2">Tipo (lo que sigue)'+(t.pasos.some(p=>p.tipo)?' · según etapas':'')+'</label><select id="fTipo2" class="campo"'+(t.pasos.some(p=>p.tipo)?' disabled':'')+'><option value="">Sin tipo</option>'+TIPOS.map(x=>'<option value="'+x[0]+'"'+(x[0]===t.tipo?' selected':'')+'>'+x[1]+'</option>').join('')+'</select></div></div>'+
     '<label class="et">Prioridad</label><div class="seg" id="segPri"></div>'+
@@ -352,8 +353,9 @@ function vistaFicha(){
     '<button class="btn" id="bGua" style="width:100%;margin-top:22px">Guardar y volver al inicio</button>'+
     '<div class="dos" style="margin-top:10px"><button class="btn sec" id="bDup">Duplicar</button><button class="btn pel" id="bBor">Borrar</button></div>';
   const liga=(id,campo)=>{$(id).oninput=e=>{t[campo]=e.target.value;guardar(t);};};
-  liga('#fTit','titulo');liga('#fTema','tema');liga('#fDet','detalle');liga('#fRes','respuesta');liga('#fResp','responsable');liga('#fLim','limite');
+  liga('#fTit','titulo');liga('#fDet','detalle');liga('#fRes','respuesta');liga('#fResp','responsable');liga('#fLim','limite');
   $('#fProy').onchange=e=>{t.proyecto=e.target.value;guardar(t);$('#cab h1').textContent=nombreProy(t.proyecto);document.documentElement.style.setProperty('--proy',colorProy(t.proyecto));toast('Movida a '+nombreProy(t.proyecto));};
+  $('#fTema').onchange=e=>{let v=e.target.value;if(v==='__nuevo'){v=(prompt('Nombre del tema nuevo')||'').trim();if(!v){e.target.innerHTML=opcTemas(t.tema);return;}}t.tema=v;guardar(t);e.target.innerHTML=opcTemas(t.tema);};
   $('#fTipo2').onchange=e=>{t.tipo=e.target.value;guardar(t);};
   const pPri=()=>{$('#segPri').innerHTML=[['alta','Alta'],['','Normal'],['baja','Baja']].map(x=>'<button data-p="'+x[0]+'" class="'+(t.prioridad===x[0]?'on':'')+'">'+x[1]+'</button>').join('');
     document.querySelectorAll('#segPri button').forEach(b=>b.onclick=()=>{t.prioridad=b.dataset.p;guardar(t);pPri();});};
