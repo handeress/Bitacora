@@ -22,6 +22,7 @@ header{position:sticky;top:0;z-index:5;background:var(--tinta);color:#fff;paddin
   padding-top:calc(10px + env(safe-area-inset-top));display:flex;gap:10px;align-items:center;border-bottom:6px solid var(--proy)}
 header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.02em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header select{background:#34302b;color:#fff;border:0;border-radius:8px;padding:9px 10px;max-width:56vw;min-height:40px}
+header .guardar{background:#fff;color:var(--tinta);border:0;border-radius:8px;padding:8px 14px;min-height:40px;font-weight:700}
 header .atras{background:none;border:0;color:#fff;font-size:22px;padding:4px 10px 4px 0;min-height:40px}
 main{padding:12px 12px 96px;max-width:720px;margin:0 auto}
 nav{position:fixed;bottom:0;left:0;right:0;z-index:5;background:var(--hoja);border-top:1px solid var(--linea);
@@ -141,7 +142,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='5.0';
+const VERSION='5.1';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -300,7 +301,7 @@ async function vistaTareas(){
   });
   $('#main').innerHTML=h;
   const re=()=>{const y=window.scrollY;return vistaTareas().then(()=>window.scrollTo(0,y));};
-  const add=async()=>{const i=$('#rap');const v=i.value.trim();if(!v)return;await nuevaTarea({titulo:v,tipo:tipoNom(S.tipo)?S.tipo:'',sesion:S.sesion});i.value='';toast('Anotado');vistaTareas().then(()=>$('#rap').focus());};
+  const add=async()=>{const i=$('#rap');const v=i.value.trim();if(!v)return;const t=await nuevaTarea({titulo:v,tipo:tipoNom(S.tipo)?S.tipo:'',sesion:S.sesion});i.value='';S.tarea=t.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);};
   const bi=$('#bInst'); if(bi) bi.onclick=async()=>{const ev=instalar; if(!ev)return; ev.prompt(); try{await ev.userChoice;}catch(e){} instalar=null; vistaTareas();};
   $('#rapOk').onclick=add; $('#rap').onkeydown=e=>{if(e.key==='Enter')add();};
   $('#fEst').onclick=()=>{S.panel=S.panel==='estado'?'':'estado';re();};
@@ -326,7 +327,7 @@ let guardarT;
 function guardar(t){ t.actualizado=ahora(); const va=visitaActiva(t.proyecto); if(va&&!va.revisadas.includes(t.id)){va.revisadas.push(t.id);dbPut('visitas',va);} clearTimeout(guardarT); guardarT=setTimeout(()=>dbPut('tareas',t),300); programar(); }
 function vistaFicha(){
   const t=tareas.find(x=>x.id===S.tarea); if(!t){S.vista='tareas';return pintar();}
-  $('#cab').innerHTML='<button class="atras" id="atras" aria-label="Volver">←</button><h1>'+esc(nombreProy(t.proyecto))+'</h1>';
+  $('#cab').innerHTML='<button class="atras" id="atras" aria-label="Volver">←</button><h1>'+esc(nombreProy(t.proyecto))+'</h1><button class="guardar" id="bGuaC">Guardar</button>';
   $('#atras').onclick=cerrarFicha;
   $('#main').innerHTML=
     '<div class="seg" id="seg"></div><div class="auto" id="autoEst"></div>'+
@@ -348,7 +349,8 @@ function vistaFicha(){
     '<div class="dos"><div><label class="et" for="fResp">Responsable</label><input type="text" id="fResp" value="'+esc(t.responsable)+'"></div>'+
     '<div><label class="et" for="fLim">Fecha límite</label><input type="date" id="fLim" value="'+esc(t.limite)+'"></div></div>'+
     '<label class="et">Historial</label><div id="hist"></div>'+
-    '<div class="dos" style="margin-top:22px"><button class="btn sec" id="bDup">Duplicar</button><button class="btn pel" id="bBor">Borrar</button></div>';
+    '<button class="btn" id="bGua" style="width:100%;margin-top:22px">Guardar y volver al inicio</button>'+
+    '<div class="dos" style="margin-top:10px"><button class="btn sec" id="bDup">Duplicar</button><button class="btn pel" id="bBor">Borrar</button></div>';
   const liga=(id,campo)=>{$(id).oninput=e=>{t[campo]=e.target.value;guardar(t);};};
   liga('#fTit','titulo');liga('#fTema','tema');liga('#fDet','detalle');liga('#fRes','respuesta');liga('#fResp','responsable');liga('#fLim','limite');
   $('#fProy').onchange=e=>{t.proyecto=e.target.value;guardar(t);$('#cab h1').textContent=nombreProy(t.proyecto);document.documentElement.style.setProperty('--proy',colorProy(t.proyecto));toast('Movida a '+nombreProy(t.proyecto));};
@@ -367,6 +369,8 @@ function vistaFicha(){
   pintarFotos(t);pintarHist(t);
   $('#masMed').onclick=()=>{t.medidas.push({nombre:'',valor:'',unidad:'m'});guardar(t);pintarMeds(t);const f=document.querySelectorAll('#meds .med input');if(f.length)f[f.length-2].focus();};
   $('#bCam').onclick=()=>$('#inCam').click(); $('#bGal').onclick=()=>$('#inGal').click();
+  const gua=()=>{if(!t.titulo.trim()){toast('Ponle nombre a la tarea');$('#fTit').focus();return;}S.volver='tareas';cerrarFicha();window.scrollTo(0,0);toast('Guardada');};
+  $('#bGua').onclick=gua; $('#bGuaC').onclick=gua;
   $('#bDup').onclick=async()=>{const c=await nuevaTarea({proyecto:t.proyecto,tema:t.tema,titulo:t.titulo+' (copia)',detalle:t.detalle,responsable:t.responsable,pasos:t.pasos.map(x=>({texto:x.texto,tipo:x.tipo,hecho:false})),docs:t.docs.map(x=>({...x})),materiales:t.materiales.map(x=>({...x,listo:false}))});liberar();S.tarea=c.id;pintar();window.scrollTo(0,0);toast('Duplicada');};
   $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);programar();cerrarFicha();toast('Borrada');};
 }
