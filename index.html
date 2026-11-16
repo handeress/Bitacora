@@ -142,7 +142,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='6.0';
+const VERSION='6.1';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -659,7 +659,7 @@ async function fusionar(r){
 function estadoParaSubir(){ return {app:'bitacora',formato:2,proyectos,tareas,visitas,borradas:sinc.borradas,aplicadas:sinc.aplicadas}; }
 async function sincronizar(manual,reintento){
   if(!sinc.token){ if(manual)toast('Falta la llave'); return; }
-  if(sinc.ocupado) return;
+  if(sinc.ocupado){ sinc.otraVez=true; return; }
   if(!navigator.onLine){ if(manual)toast('Sin internet'); return; }
   sinc.ocupado=true; clearTimeout(sincT); let entraron=0, llegaron=0, otra=false;
   const ver=()=>{const e=$('#sEst'); if(e) e.textContent=estadoSinc();}; ver();
@@ -710,11 +710,16 @@ async function sincronizar(manual,reintento){
   }catch(e){ sinc.error=(e&&e.message)||'error de red.'; if(manual)toast('No se pudo sincronizar'); }
   sinc.ocupado=false; ver();
   if(otra){ return sincronizar(manual,true); }
+  if(sinc.otraVez){ sinc.otraVez=false; return sincronizar(); }
   if((entraron||llegaron)&&S.vista!=='ficha') pintar();
 }
 setInterval(()=>{ if(document.visibilityState==='visible') sincronizar(); },60000);
 window.addEventListener('online',()=>sincronizar());
-document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') sincronizar(); });
+function guardarYa(){ clearTimeout(guardarT); const t=tareas.find(x=>x.id===S.tarea); if(t&&db){ try{ db.transaction('tareas','readwrite').objectStore('tareas').put(t); }catch(e){} } }
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible') sincronizar();
+  else { guardarYa(); sincronizar(); }
+});
 
 let modoArch='sumar';
 $('#inArch').onchange=async e=>{
@@ -735,7 +740,7 @@ window.addEventListener('appinstalled',()=>{instalar=null;toast('App instalada')
 
 /* ---------- navegación ---------- */
 document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{S.vista=b.dataset.v;pintar();window.scrollTo(0,0);});
-window.addEventListener('pagehide',()=>{const t=tareas.find(x=>x.id===S.tarea);if(t&&db){try{db.transaction('tareas','readwrite').objectStore('tareas').put(t);}catch(e){}}});
+window.addEventListener('pagehide',()=>{ guardarYa(); sincronizar(); });
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 iniciar().catch(e=>{$('#main').innerHTML='<div class="vacio">No se pudo abrir la base de datos de la app.<br>'+esc(e&&e.message||e)+'</div>';});
 </script>

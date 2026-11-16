@@ -41,7 +41,7 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 ## Versión 6.0
 
 - Varios aparatos (celular y PC) con la misma llave: cada sincronización baja `app/tareas.json`, junta tarea por tarea (gana la más reciente por `actualizado`), aplica lápidas de borrado (`borradas`) y baja las fotos que falten; después sube el estado junto. `aplicadas` registra qué archivos del buzón ya se aplicaron, para que un aparato nuevo no los repita. Si otro aparato subió al mismo tiempo, se reintenta.
-- Sincroniza cada minuto mientras la app está abierta.
+- Sincroniza al abrir, al cerrar o pasar a segundo plano (guarda primero la ficha abierta), al recuperar internet y cada minuto mientras está abierta (6.1).
 
 ## Pendiente
 
