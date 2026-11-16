@@ -142,7 +142,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='5.2';
+const VERSION='6.0';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -210,7 +210,7 @@ async function iniciar(){
   tareas=(await dbAll('tareas')).map(norm); visitas=await dbAll('visitas');
   const m=await dbGet('meta','proy'); S.proy=(m&&proyectos.some(p=>p.id===m.v))?m.v:proyectos[0].id;
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
-  sinc.token=((await dbGet('meta','token'))||{}).v||''; sinc.aplicadas=((await dbGet('meta','entrada'))||{}).v||[];
+  sinc.token=((await dbGet('meta','token'))||{}).v||''; sinc.borradas=((await dbGet('meta','borradas'))||{}).v||{}; sinc.aplicadas=((await dbGet('meta','entrada'))||{}).v||[];
   sinc.ultimo=((await dbGet('meta','sinc'))||{}).v||''; sinc.firma=((await dbGet('meta','firma'))||{}).v||'';
   pintar(); sincronizar();
 }
@@ -303,7 +303,7 @@ async function vistaTareas(){
   const re=()=>{const y=window.scrollY;return vistaTareas().then(()=>window.scrollTo(0,y));};
   const add=async()=>{const i=$('#rap');const v=i.value.trim();if(!v)return;const t=await nuevaTarea({titulo:v,tipo:tipoNom(S.tipo)?S.tipo:'',sesion:S.sesion});i.value='';S.tarea=t.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);};
   const bi=$('#bInst'); if(bi) bi.onclick=async()=>{const ev=instalar; if(!ev)return; ev.prompt(); try{await ev.userChoice;}catch(e){} instalar=null; vistaTareas();};
-  $('#rapOk').onclick=add; $('#rap').onkeydown=e=>{if(e.key==='Enter')add();};
+  $('#rapOk').onclick=add; $('#rap').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add();}};
   $('#fEst').onclick=()=>{S.panel=S.panel==='estado'?'':'estado';re();};
   $('#fTipo').onclick=()=>{S.panel=S.panel==='tipo'?'':'tipo';re();};
   $('#fSes').onclick=()=>{S.sesion=!S.sesion;S.panel='';re();};
@@ -374,7 +374,7 @@ function vistaFicha(){
   const gua=()=>{if(!t.titulo.trim()){toast('Ponle nombre a la tarea');$('#fTit').focus();return;}S.volver='tareas';cerrarFicha();window.scrollTo(0,0);toast('Guardada');};
   $('#bGua').onclick=gua; $('#bGuaC').onclick=gua;
   $('#bDup').onclick=async()=>{const c=await nuevaTarea({proyecto:t.proyecto,tema:t.tema,titulo:t.titulo+' (copia)',detalle:t.detalle,responsable:t.responsable,pasos:t.pasos.map(x=>({texto:x.texto,tipo:x.tipo,hecho:false})),docs:t.docs.map(x=>({...x})),materiales:t.materiales.map(x=>({...x,listo:false}))});liberar();S.tarea=c.id;pintar();window.scrollTo(0,0);toast('Duplicada');};
-  $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);programar();cerrarFicha();toast('Borrada');};
+  $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);await lapida(t.id);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);programar();cerrarFicha();toast('Borrada');};
 }
 function liberar(){S.urls.forEach(u=>URL.revokeObjectURL(u));S.urls=[];}
 function cerrarFicha(){const t=tareas.find(x=>x.id===S.tarea);if(t){clearTimeout(guardarT);dbPut('tareas',t);}liberar();S.vista=S.volver||'tareas';S.tarea=null;pintar();}
@@ -458,7 +458,7 @@ function vistaVisita(){
     else h+='<h2 class="tema"><span>Visitas anteriores</span><span>'+ant.length+'</span></h2>';
     ant.forEach(x=>{h+='<div class="tarj"><h3>'+fechaHora(x.inicio)+'</h3><p>'+[x.clima,x.personal].filter(Boolean).map(esc).join(' · ')+(x.clima||x.personal?'<br>':'')+x.revisadas.length+' tareas revisadas · '+x.nuevas.length+' nuevas'+(x.nota?'<br>'+esc(x.nota):'')+'</p></div>';});
     $('#main').innerHTML=h;
-    $('#vIni').onclick=async()=>{const ss=delProyecto().filter(t=>t.sesion&&t.estado!=='terminado');const solo=ss.length&&confirm('Hay '+ss.length+' tareas en la sesión. ¿Hacer la visita solo con esas?\n(Cancelar = todas las abiertas)')?ss.map(t=>t.id):null;const n={id:uid(),proyecto:S.proy,inicio:ahora(),fin:'',clima:'',personal:'',nota:'',revisadas:[],nuevas:[],solo};visitas.push(n);await dbPut('visitas',n);programar();vistaVisita();};
+    $('#vIni').onclick=async()=>{const ss=delProyecto().filter(t=>t.sesion&&t.estado!=='terminado');const solo=ss.length&&confirm('Hay '+ss.length+' tareas en la sesión. ¿Hacer la visita solo con esas?\n(Cancelar = todas las abiertas)')?ss.map(t=>t.id):null;const n={id:uid(),proyecto:S.proy,inicio:ahora(),fin:'',clima:'',personal:'',nota:'',revisadas:[],nuevas:[],solo,actualizado:ahora()};visitas.push(n);await dbPut('visitas',n);programar();vistaVisita();};
     return;
   }
   const lista=delProyecto().filter(t=>v.solo?(v.solo.includes(t.id)||v.nuevas.includes(t.id)):(t.estado!=='terminado'||v.revisadas.includes(t.id))).sort((a,b)=>(v.revisadas.includes(a.id)-v.revisadas.includes(b.id))||(a.tema||'').localeCompare(b.tema||'')||(a.creado<b.creado?-1:1));
@@ -473,9 +473,9 @@ function vistaVisita(){
      '<label class="et" for="vNota">Avance y notas del día</label><textarea id="vNota">'+esc(v.nota)+'</textarea>'+
      '<button class="btn" id="vFin" style="width:100%;margin-top:14px">Cerrar visita</button>';
   $('#main').innerHTML=h;
-  const gv=()=>{dbPut('visitas',v);programar();};
+  const gv=()=>{v.actualizado=ahora();dbPut('visitas',v);programar();};
   const add=async()=>{const i=$('#vRap');const x=i.value.trim();if(!x)return;const t=await nuevaTarea({titulo:x,origen:'Visita '+fecha(v.inicio)});v.nuevas.push(t.id);v.revisadas.push(t.id);gv();toast('Anotado');vistaVisita();$('#vRap').focus();};
-  $('#vRapOk').onclick=add; $('#vRap').onkeydown=e=>{if(e.key==='Enter')add();};
+  $('#vRapOk').onclick=add; $('#vRap').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add();}};
   document.querySelectorAll('.vf .abre').forEach(b=>b.onclick=()=>{S.tarea=b.dataset.id;S.volver='visita';S.vista='ficha';pintar();window.scrollTo(0,0);});
   document.querySelectorAll('.vf .rev').forEach(b=>b.onclick=()=>{const id=b.dataset.id;const k=v.revisadas.indexOf(id);if(k<0)v.revisadas.push(id);else if(!v.nuevas.includes(id))v.revisadas.splice(k,1);gv();const y=window.scrollY;vistaVisita();window.scrollTo(0,y);});
   document.querySelectorAll('#vClima .chip').forEach(c=>c.onclick=()=>{v.clima=v.clima===c.dataset.c?'':c.dataset.c;gv();document.querySelectorAll('#vClima .chip').forEach(x=>x.classList.toggle('on',x.dataset.c===v.clima));});
@@ -542,12 +542,12 @@ async function vistaMas(){
   $('#bTxt').onclick=copiarLista; $('#bResp').onclick=respaldar;
   $('#bSum').onclick=()=>{modoArch='sumar';$('#inArch').click();};
   $('#bRest').onclick=()=>{if(confirm('Restaurar borra TODO lo que hay en este celular y lo reemplaza por el archivo. ¿Seguir?')){modoArch='restaurar';$('#inArch').click();}};
-  document.querySelectorAll('.proy .chip').forEach(c=>c.onclick=async()=>{const p=proyectos.find(x=>x.id===c.dataset.p);p.estado=p.estado==='cerrado'?'activo':'cerrado';await dbPut('proyectos',p);pintar();});
-  document.querySelectorAll('.proy input[type=color]').forEach(c=>c.onchange=async()=>{const p=proyectos.find(x=>x.id===c.dataset.pc);p.color=c.value;await dbPut('proyectos',p);programar();pintar();});
+  document.querySelectorAll('.proy .chip').forEach(c=>c.onclick=async()=>{const p=proyectos.find(x=>x.id===c.dataset.p);p.estado=p.estado==='cerrado'?'activo':'cerrado';p.actualizado=ahora();await dbPut('proyectos',p);programar();pintar();});
+  document.querySelectorAll('.proy input[type=color]').forEach(c=>c.onchange=async()=>{const p=proyectos.find(x=>x.id===c.dataset.pc);p.color=c.value;p.actualizado=ahora();await dbPut('proyectos',p);programar();pintar();});
   $('#nProyOk').onclick=async()=>{const v=$('#nProy').value.trim();if(!v)return;
     const id=v.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
     if(!id||proyectos.some(p=>p.id===id))return toast('Ese proyecto ya existe');
-    const p={id,nombre:v,estado:'activo',color:PALETA[proyectos.length%PALETA.length]};await dbPut('proyectos',p);proyectos.push(p);S.proy=id;dbPut('meta',{k:'proy',v:id});pintar();toast('Proyecto creado');};
+    const p={id,nombre:v,estado:'activo',color:PALETA[proyectos.length%PALETA.length],actualizado:ahora()};await dbPut('proyectos',p);programar();proyectos.push(p);S.proy=id;dbPut('meta',{k:'proy',v:id});pintar();toast('Proyecto creado');};
 }
 function textoLista(){
   const ts=delProyecto(); const marca={pendiente:'[ ]',proceso:'[~]',terminado:'[x]'};
@@ -598,14 +598,15 @@ async function sumarDatos(d){
     const de=t.estado; Object.assign(t,c.campos); t.id=c.id; norm(t); if(!ESTADOS[t.estado])t.estado=de; if(!('estado' in c.campos)) autoEtapas(t);
     if(t.estado!==de) t.historial.push({fecha:ahora(),de,a:t.estado,nota:c.nota||'Cambio desde el chat'});
     t.actualizado=ahora(); await dbPut('tareas',t); nt++; }
-  for(const id of d.borrar||[]){ const i=tareas.findIndex(x=>x.id===id); if(i<0)continue;
+  for(const id of d.borrar||[]){ await lapida(id); const i=tareas.findIndex(x=>x.id===id); if(i<0)continue;
     for(const f of tareas[i].fotos||[]) await dbDel('fotos',f); await dbDel('tareas',id); tareas.splice(i,1); nt++; }
   for(const v of d.visitas||[]){ if(!v||!v.id||visitas.some(x=>x.id===v.id))continue; v.revisadas=v.revisadas||[];v.nuevas=v.nuevas||[]; visitas.push(v); await dbPut('visitas',v); }
   return nt;
 }
 
 /* ---------- sincronización con el repositorio de datos ---------- */
-const sinc={token:'',aplicadas:[],ultimo:'',firma:'',error:'',ocupado:false,pide:false};
+const sinc={token:'',aplicadas:[],ultimo:'',firma:'',error:'',ocupado:false,pide:false,borradas:{}};
+async function lapida(id){ sinc.borradas[id]=ahora(); await dbPut('meta',{k:'borradas',v:sinc.borradas}); }
 let sincT;
 function programar(){ clearTimeout(sincT); sincT=setTimeout(()=>sincronizar(),15000); }
 function estadoSinc(){
@@ -626,47 +627,92 @@ function falla(r){
   if(r.status===403||r.status===404) return new Error('la llave no tiene permiso sobre '+GH.repo+'.');
   return new Error('GitHub respondió '+r.status+'.');
 }
-async function sincronizar(manual){
+function txtB64(b64){const s=atob(b64.replace(/\n/g,''));const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return new TextDecoder().decode(u);}
+async function bajarRemoto(){
+  const g=await gh('app/tareas.json');
+  if(g.status===404) return {datos:null,sha:undefined};
+  if(!g.ok) throw falla(g);
+  const j=await g.json(); let txt;
+  if(j.content) txt=txtB64(j.content);
+  else { const r=await gh('app/tareas.json',{headers:{'Accept':'application/vnd.github.raw+json'}}); if(!r.ok) throw falla(r); txt=await r.text(); }
+  let d=null; try{d=JSON.parse(txt);}catch(e){}
+  return {datos:d,sha:j.sha};
+}
+async function fusionar(r){
+  let cambios=0;
+  for(const [id,f] of Object.entries(r.borradas||{})) if(!sinc.borradas[id]||f>sinc.borradas[id]) sinc.borradas[id]=f;
+  await dbPut('meta',{k:'borradas',v:sinc.borradas});
+  for(const [id,f] of Object.entries(sinc.borradas)){ const i=tareas.findIndex(x=>x.id===id);
+    if(i>=0&&(tareas[i].actualizado||'')<=f){ for(const ft of tareas[i].fotos||[]) await dbDel('fotos',ft); await dbDel('tareas',id); tareas.splice(i,1); cambios++; } }
+  for(const p of r.proyectos||[]){ if(!p||!p.id)continue; const i=proyectos.findIndex(x=>x.id===p.id);
+    if(i<0){proyectos.push(p);await dbPut('proyectos',p);cambios++;} else if((p.actualizado||'')>(proyectos[i].actualizado||'')){proyectos[i]=p;await dbPut('proyectos',p);cambios++;} }
+  for(const t of r.tareas||[]){ if(!t||!t.id)continue; if(sinc.borradas[t.id]&&sinc.borradas[t.id]>=(t.actualizado||''))continue;
+    const i=tareas.findIndex(x=>x.id===t.id);
+    if(i<0){norm(t);tareas.push(t);await dbPut('tareas',t);cambios++;}
+    else if((t.actualizado||'')>(tareas[i].actualizado||'')){ if(S.vista==='ficha'&&S.tarea===t.id) continue; norm(t);tareas[i]=t;await dbPut('tareas',t);cambios++;} }
+  for(const v of r.visitas||[]){ if(!v||!v.id)continue; const i=visitas.findIndex(x=>x.id===v.id);
+    if(i<0){visitas.push(v);await dbPut('visitas',v);cambios++;} else if((v.actualizado||'')>(visitas[i].actualizado||'')){visitas[i]=v;await dbPut('visitas',v);cambios++;} }
+  for(const k of r.aplicadas||[]) if(!sinc.aplicadas.includes(k)) sinc.aplicadas.push(k);
+  await dbPut('meta',{k:'entrada',v:sinc.aplicadas});
+  return cambios;
+}
+function estadoParaSubir(){ return {app:'bitacora',formato:2,proyectos,tareas,visitas,borradas:sinc.borradas,aplicadas:sinc.aplicadas}; }
+async function sincronizar(manual,reintento){
   if(!sinc.token){ if(manual)toast('Falta la llave'); return; }
   if(sinc.ocupado) return;
   if(!navigator.onLine){ if(manual)toast('Sin internet'); return; }
-  sinc.ocupado=true; clearTimeout(sincT); let entraron=0;
+  sinc.ocupado=true; clearTimeout(sincT); let entraron=0, llegaron=0, otra=false;
   const ver=()=>{const e=$('#sEst'); if(e) e.textContent=estadoSinc();}; ver();
   try{
-    // 1. Lo que Claude dejó para la app
+    // 1. Bajar lo que subieron los otros aparatos y juntarlo
+    const rem=await bajarRemoto(); const vacio=!tareas.length;
+    if(rem.datos&&rem.datos.app==='bitacora') llegaron=await fusionar(rem.datos);
+    // 2. Lo que Claude dejó para la app (un aparato nuevo no lo repite si el repo ya lo tiene aplicado)
     sinc.pide=false;
+    const nuevo=!!(rem.datos&&vacio);
     for(const dir of ['claude/entrada','claude/buzon']){
       const l=await gh(dir);
       if(l.status===401) throw falla(l);
       if(l.status!==200) continue;
       const arch=(await l.json()).filter(x=>x.type==='file'&&/\.json$/.test(x.name)).sort((a,b)=>a.name<b.name?-1:1);
       for(const f of arch){ const clave=(dir==='claude/buzon'?'buzon/':'')+f.name; if(sinc.aplicadas.includes(clave))continue;
+        if(nuevo){ sinc.aplicadas.push(clave); continue; }
         const r=await gh(dir+'/'+f.name,{headers:{'Accept':'application/vnd.github.raw+json'}}); if(!r.ok)throw falla(r);
         let d; try{d=JSON.parse(await r.text());}catch(e){d=null;}
         if(d&&d.min>FORMATO){ sinc.pide=true; continue; }
         if(d&&d.app==='bitacora') entraron+=await sumarDatos(d);
         sinc.aplicadas.push(clave); await dbPut('meta',{k:'entrada',v:sinc.aplicadas}); }
     }
-    // 2. Fotos nuevas
+    await dbPut('meta',{k:'entrada',v:sinc.aplicadas});
+    // 3. Subir fotos nuevas de este aparato
     for(const f of await dbAll('fotos')){ if(f.subida||!tareas.some(t=>t.id===f.tarea))continue;
       const data=(await aData(f.blob)).split(',')[1];
       const r=await gh('app/fotos/'+f.id+'.jpg',{method:'PUT',body:JSON.stringify({message:'foto '+f.id,content:data})});
       if(!r.ok&&r.status!==422) throw falla(r);
       f.subida=true; await dbPut('fotos',f); }
-    // 3. Estado de las tareas (solo si cambió)
-    const cuerpo=JSON.stringify({proyectos,tareas,visitas}); const firma=hashTxt(cuerpo);
-    if(firma!==sinc.firma){
-      let sha; const g=await gh('app/tareas.json'); if(g.status===200)sha=(await g.json()).sha; else if(g.status!==404)throw falla(g);
-      const txt=JSON.stringify({app:'bitacora',formato:1,fecha:ahora(),proyectos,tareas,visitas},null,1);
-      const r=await gh('app/tareas.json',{method:'PUT',body:JSON.stringify({message:'tareas '+hoy(),content:b64txt(txt),sha})}); if(!r.ok)throw falla(r);
-      sinc.firma=firma; await dbPut('meta',{k:'firma',v:firma}); }
+    // 4. Bajar fotos que tomaron otros aparatos
+    for(const t of tareas){ for(const id of t.fotos||[]){ if(await dbGet('fotos',id)) continue;
+      const r=await gh('app/fotos/'+id+'.jpg',{headers:{'Accept':'application/vnd.github.raw+json'}});
+      if(r.status===404) continue; if(!r.ok) throw falla(r);
+      const blob=await r.blob(); await dbPut('fotos',{id,tarea:t.id,fecha:ahora(),blob,subida:true}); } }
+    // 5. Subir el estado juntado si cambió
+    const cuerpo=JSON.stringify(estadoParaSubir()); const firma=hashTxt(cuerpo);
+    const firmaRem=rem.datos?hashTxt(JSON.stringify({app:'bitacora',formato:2,proyectos:rem.datos.proyectos,tareas:rem.datos.tareas,visitas:rem.datos.visitas,borradas:rem.datos.borradas,aplicadas:rem.datos.aplicadas})):'';
+    if(firma!==firmaRem){
+      const txt=JSON.stringify(Object.assign({fecha:ahora()},estadoParaSubir()),null,1);
+      const r=await gh('app/tareas.json',{method:'PUT',body:JSON.stringify({message:'tareas '+hoy(),content:b64txt(txt),sha:rem.sha})});
+      if(r.status===409||r.status===422){ otra=!reintento; if(!otra) throw new Error('otro aparato estaba subiendo al mismo tiempo; se reintenta en un momento.'); }
+      else if(!r.ok) throw falla(r);
+    }
+    sinc.firma=firma; await dbPut('meta',{k:'firma',v:firma});
     sinc.ultimo=ahora(); sinc.error=''; await dbPut('meta',{k:'sinc',v:sinc.ultimo});
-    if(manual||entraron) toast(entraron?entraron+(entraron===1?' tarea nueva de Claude':' tareas nuevas de Claude'):'Sincronizado');
+    if(manual||entraron||llegaron) toast(entraron?entraron+(entraron===1?' tarea nueva de Claude':' tareas nuevas de Claude'):(llegaron?'Llegaron cambios de otro aparato':'Sincronizado'));
   }catch(e){ sinc.error=(e&&e.message)||'error de red.'; if(manual)toast('No se pudo sincronizar'); }
   sinc.ocupado=false; ver();
-  if(entraron&&S.vista==='tareas') vistaTareas();
-  if(entraron&&S.vista==='visita') vistaVisita();
+  if(otra){ return sincronizar(manual,true); }
+  if((entraron||llegaron)&&S.vista!=='ficha') pintar();
 }
+setInterval(()=>{ if(document.visibilityState==='visible') sincronizar(); },60000);
 window.addEventListener('online',()=>sincronizar());
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') sincronizar(); });
 
