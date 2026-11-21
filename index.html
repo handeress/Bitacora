@@ -147,6 +147,11 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 #v3d button{background:var(--tinta);color:#fff;border:0;padding:14px;padding-top:calc(14px + env(safe-area-inset-top));font-weight:700;text-align:left}
 #v3d iframe{flex:1;border:0;width:100%;background:#fff}
 nav button{font-size:12.5px}
+.gact{align-items:center;border-left:5px solid var(--proy);margin:4px 0 2px;min-height:44px;padding:9px 12px}
+.gact>b{font-size:16px;color:var(--proy);padding:0 4px;white-space:nowrap}
+.subact{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 2px 4px;font-weight:700;font-size:14px;color:var(--tinta)}
+.subact small{font-weight:400;color:var(--gris)}
+#ordA{flex-wrap:wrap}
 .oculto{display:none!important}
 </style>
 </head>
@@ -169,7 +174,7 @@ nav button{font-size:12.5px}
 
 <script>
 'use strict';
-const VERSION='8.1';
+const VERSION='8.2';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -217,7 +222,7 @@ const dbClear=s=>tx(s,'readwrite',o=>o.clear());
 
 /* ---------- estado ---------- */
 let proyectos=[], tareas=[], visitas=[];
-const S={vista:'tareas', proy:'', grupo:'', verTerm:false, nueva:false, q:'', tarea:null, urls:[]};
+const S={vista:'tareas', proy:'', grupo:'', verTerm:false, nueva:false, q:'', tarea:null, urls:[], ordenA:'trabajo'};
 const $=s=>document.querySelector(s);
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
@@ -238,7 +243,7 @@ async function iniciar(){
   const m=await dbGet('meta','proy'); S.proy=(m&&proyectos.some(p=>p.id===m.v))?m.v:proyectos[0].id;
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
   sinc.token=((await dbGet('meta','token'))||{}).v||''; sinc.borradas=((await dbGet('meta','borradas'))||{}).v||{}; sinc.aplicadas=((await dbGet('meta','entrada'))||{}).v||[];
-  sinc.ultimo=((await dbGet('meta','sinc'))||{}).v||''; sinc.firma=((await dbGet('meta','firma'))||{}).v||'';
+  S.ordenA=((await dbGet('meta','ordenA'))||{}).v||'trabajo'; sinc.ultimo=((await dbGet('meta','sinc'))||{}).v||''; sinc.firma=((await dbGet('meta','firma'))||{}).v||'';
   pintar(); sincronizar();
 }
 
@@ -273,10 +278,11 @@ function cabecera(){
 function salirGrupo(){S.grupo='';S.q='';S.verTerm=false;pintar();window.scrollTo(0,0);}
 
 /* ---------- inicio por grupos y lista de un grupo ---------- */
-const GRUPOS_EXTRA={sin:'Sin tipo',sesion:'Sesión',claude:'Para Claude',terminadas:'Terminadas'};
+const GRUPOS_EXTRA={acts:'Actividades',sin:'Sin tipo',sesion:'Sesión',claude:'Para Claude',terminadas:'Terminadas'};
 const nomGrupo=g=>GRUPOS_EXTRA[g]||tipoNom(g)||g;
 function enGrupo(t,g){
   if(g==='terminadas') return t.estado==='terminado';
+  if(g==='acts') return t.estado!=='terminado';
   if(g==='sesion') return t.sesion;
   if(g==='claude') return t.claude;
   if(t.estado==='terminado') return S.verTerm&&(g==='sin'?!tipoNom(t.tipo):t.tipo===g);
@@ -309,6 +315,18 @@ function marcarSiguiente(t){
     guardarSimple(t); toast(t.estado==='terminado'?'Tarea terminada':'Etapa hecha'); return true; }
   if(!confirm('¿Marcar terminada?\n\n'+t.titulo))return false;
   t.historial.push({fecha:ahora(),de:t.estado,a:'terminado',nota:'Desde la lista'}); t.estado='terminado'; guardarSimple(t); toast('Tarea terminada'); return true;
+}
+function porActividad(lista){
+  const acts=actsProy().filter(a=>!a.futuro&&lista.some(t=>t.actividad===a.id)).sort(ordenTrabajo); let h='',et=null;
+  acts.forEach(a=>{const n=Math.max(0,nivelAct(a)),k=nomEtapa(n);
+    if(k!==et){et=k;const nt=lista.filter(t=>{const b=actividades.find(x=>x.id===t.actividad);return b&&!b.futuro&&Math.max(0,nivelAct(b))===n;}).length;h+='<h2 class="tema"><span>'+esc(k)+'</span><span>'+nt+'</span></h2>';}
+    const ea=estadoAct(a); h+='<button class="subact fa" data-id="'+a.id+'"><span class="cod">'+esc(a.codigo)+'</span> '+esc(a.nombre)+(ea==='bloqueada'?' <small>· espera '+esperando(a).map(x=>esc(x.codigo||x.nombre)).join(', ')+'</small>':'')+'</button>';
+    h+=lista.filter(t=>t.actividad===a.id).sort(ordenT).map(t=>filaTarea(t,true)).join('');});
+  const fut=lista.filter(t=>{const b=actividades.find(x=>x.id===t.actividad);return b&&b.futuro;});
+  const sin=lista.filter(t=>!actividades.some(x=>x.id===t.actividad));
+  if(fut.length) h+='<h2 class="tema"><span>Futuro</span><span>'+fut.length+'</span></h2>'+fut.sort(ordenT).map(t=>filaTarea(t,true)).join('');
+  if(sin.length) h+='<h2 class="tema"><span>Sin actividad</span><span>'+sin.length+'</span></h2>'+sin.sort(ordenT).map(t=>filaTarea(t,true)).join('');
+  return h;
 }
 function porTema(lista,conTipo){
   const g={}; lista.forEach(t=>{const k=(t.tema||'Sin clasificar').trim()||'Sin clasificar';(g[k]=g[k]||[]).push(t);});
@@ -352,19 +370,24 @@ function cuerpoTareas(){
     const cnt=k=>ab.filter(t=>k==='sin'?!tipoNom(t.tipo):t.tipo===k).length;
     const tile=(k,nom,n,al)=>'<button class="gr'+(n?'':' cero')+'" data-g="'+k+'"><b>'+n+'</b><span>'+esc(nom)+'</span>'+(al?'<small>'+al+' alta</small>':'')+'</button>';
     const alt=k=>ab.filter(t=>t.prioridad==='alta'&&(k==='sin'?!tipoNom(t.tipo):t.tipo===k)).length;
+    const conAct=ab.filter(t=>t.actividad).length;
+    h+='<button class="fila gact" data-g="acts"><span style="flex:1"><b class="t" style="font-size:15px;color:var(--tinta);padding:0">Actividades</b> <span class="s">· orden de elaboración</span></span><b>'+conAct+' ›</b></button>';
     h+='<h2 class="tema"><span>Por tipo · abiertas</span><span>'+ab.length+'</span></h2><div class="grupos">'+TIPOS.map(x=>tile(x[0],x[2],cnt(x[0]),alt(x[0]))).join('')+'</div>';
     h+='<div class="grupos cuatro">'+tile('sin','Sin tipo',cnt('sin'),alt('sin'))+tile('sesion','★ Sesión',todas.filter(t=>t.sesion).length)+tile('claude','Claude',todas.filter(t=>t.claude).length)+tile('terminadas','Hechas',todas.filter(t=>t.estado==='terminado').length)+'</div>';
   }
   else{
     const l=todas.filter(t=>enGrupo(t,g));
     if(g==='sesion'&&l.length) h+='<div class="lin"><span>'+l.length+(l.length===1?' tarea':' tareas')+' en la sesión</span><button id="vacSes">Vaciar sesión</button></div>';
-    h+=l.length?porTema(l,!tipoNom(g)):'<div class="vacio">'+(g==='sesion'?'La sesión está vacía.<br>Toca la estrella de las tareas que vas a trabajar.':g==='claude'?'Ninguna marcada Para Claude.':'Nada abierto en este grupo.')+'</div>';
+    if(g==='acts'){ h+=l.length?porActividad(l):'<div class="vacio">No hay tareas abiertas.</div>'; }
+    else h+=l.length?porTema(l,!tipoNom(g)):'<div class="vacio">'+(g==='sesion'?'La sesión está vacía.<br>Toca la estrella de las tareas que vas a trabajar.':g==='claude'?'Ninguna marcada Para Claude.':'Nada abierto en este grupo.')+'</div>';
     if(tipoNom(g)||g==='sin'){ const nt=todas.filter(t=>t.estado==='terminado'&&(g==='sin'?!tipoNom(t.tipo):t.tipo===g)).length;
       if(nt) h+='<div class="lin" style="margin-top:12px"><span>'+nt+(nt===1?' terminada':' terminadas')+'</span><button id="verTerm">'+(S.verTerm?'Ocultar':'Ver')+'</button></div>'; }
   }
   const c=$('#cuerpo'); if(!c) return; c.innerHTML=h;
   const re=()=>{const y=window.scrollY;cuerpoTareas();window.scrollTo(0,y);};
+  c.querySelectorAll('.gact').forEach(b=>b.onclick=()=>{S.grupo='acts';S.q='';S.verTerm=false;pintar();window.scrollTo(0,0);});
   c.querySelectorAll('.gr').forEach(b=>b.onclick=()=>{S.grupo=b.dataset.g;S.q='';S.verTerm=false;pintar();window.scrollTo(0,0);});
+  c.querySelectorAll('.subact').forEach(b=>b.onclick=()=>{S.act=b.dataset.id;S.volverA='tareas';S.vista='act';pintar();window.scrollTo(0,0);});
   c.querySelectorAll('.vf .abre').forEach(f=>f.onclick=()=>{S.tarea=f.dataset.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);});
   c.querySelectorAll('.vf .ok').forEach(f=>f.onclick=()=>{const t=tareas.find(x=>x.id===f.dataset.id);if(t&&marcarSiguiente(t))re();});
   c.querySelectorAll('.vf .ses').forEach(f=>f.onclick=()=>{const t=tareas.find(x=>x.id===f.dataset.id);t.sesion=!t.sesion;guardarSimple(t);re();});
@@ -529,6 +552,12 @@ const ordenCod=(x,y)=>claveCod(x)<claveCod(y)?-1:claveCod(x)>claveCod(y)?1:0;
 const tareasDe=id=>tareas.filter(t=>t.actividad===id);
 const completa=a=>{const ts=tareasDe(a.id);return ts.length>0&&ts.every(t=>t.estado==='terminado');};
 const esperando=a=>a.antes.map(i=>actividades.find(x=>x.id===i)).filter(b=>b&&!completa(b));
+function nivelAct(a,vis){ if(completa(a))return -1; vis=vis||new Set(); if(vis.has(a.id))return 0; vis.add(a.id);
+  const es=esperando(a); if(!es.length){vis.delete(a.id);return 0;} const n=1+Math.max(...es.map(b=>nivelAct(b,vis))); vis.delete(a.id); return n; }
+const RANGO={proceso:0,lista:1,bloqueada:2,completa:3};
+const claveTrabajo=a=>[a.futuro?2:(completa(a)?1:0), Math.max(0,nivelAct(a)), RANGO[estadoAct(a)], claveCod(a)];
+function ordenTrabajo(x,y){const a=claveTrabajo(x),b=claveTrabajo(y);for(let i=0;i<4;i++){if(a[i]<b[i])return -1;if(a[i]>b[i])return 1;}return 0;}
+const nomEtapa=n=>n===0?'Etapa 1 · se puede hacer ya':'Etapa '+(n+1)+' · después de la etapa '+n;
 function estadoAct(a){ if(completa(a))return 'completa'; if(esperando(a).length)return 'bloqueada'; return tareasDe(a.id).some(t=>t.estado!=='pendiente')?'proceso':'lista'; }
 const EA={completa:['Completa','var(--term)'],bloqueada:['Bloqueada','var(--gris)'],proceso:['En curso','var(--proc)'],lista:['Lista para empezar','var(--pend)']};
 function filaAct(a){
@@ -541,7 +570,9 @@ function filaAct(a){
 }
 function vistaActs(){
   $('#main').innerHTML='<div class="rapida"><input type="search" id="busA" placeholder="Buscar actividad…" value="'+esc(S.qa||'')+'" autocomplete="off"><button class="btn" id="nAct" style="font-size:22px;min-width:52px" aria-label="Nueva actividad">+</button></div><div id="cuerpoA"></div>';
+  $('#cuerpoA').insertAdjacentHTML('beforebegin','<div class="chips" id="ordA"><button class="chip" data-o="trabajo">Orden de trabajo</button><button class="chip" data-o="capitulo">Por capítulo</button><button class="chip" data-o="estado">Por estado</button></div>');
   const pinta=()=>{
+    document.querySelectorAll('#ordA .chip').forEach(b=>b.classList.toggle('on',b.dataset.o===S.ordenA));
     const l=actsProy().sort(ordenCod), q=(S.qa||'').trim().toLowerCase();
     const ls=l.filter(a=>!q||(a.codigo+' '+a.nombre+' '+a.capitulo+' '+a.descripcion).toLowerCase().includes(q));
     let c=''; if(!l.length) c='<div class="vacio">Sin actividades en '+esc(nombreProy(S.proy))+'.<br>Toca + para crear la primera.</div>';
@@ -549,12 +580,17 @@ function vistaActs(){
     const ab=ls.filter(a=>!a.futuro), fut=ls.filter(a=>a.futuro);
     if(ab.length&&!q){ const n={lista:0,proceso:0,bloqueada:0,completa:0}; ab.forEach(a=>n[estadoAct(a)]++);
       c+='<div class="lin"><span>'+n.lista+' listas · '+n.proceso+' en curso · '+n.bloqueada+' bloqueadas · '+n.completa+' completas</span></div>'; }
-    const caps={}; ab.forEach(a=>{const k=a.capitulo||'Sin capítulo';(caps[k]=caps[k]||[]).push(a);});
+    const caps={}; let lista=ab.slice(), clave;
+    if(S.ordenA==='trabajo'){ lista.sort(ordenTrabajo); clave=a=>completa(a)?'Completas':nomEtapa(Math.max(0,nivelAct(a))); }
+    else if(S.ordenA==='estado'){ lista.sort((x,y)=>RANGO[estadoAct(x)]-RANGO[estadoAct(y)]||ordenCod(x,y)); clave=a=>EA[estadoAct(a)][0]; }
+    else clave=a=>a.capitulo||'Sin capítulo';
+    lista.forEach(a=>{const k=clave(a);(caps[k]=caps[k]||[]).push(a);});
     Object.keys(caps).forEach(k=>{c+='<h2 class="tema"><span>'+esc(k)+'</span><span>'+caps[k].length+'</span></h2>'+caps[k].map(filaAct).join('');});
     if(fut.length) c+='<h2 class="tema"><span>Futuro</span><span>'+fut.length+'</span></h2>'+fut.map(filaAct).join('');
     $('#cuerpoA').innerHTML=c;
     document.querySelectorAll('.fa').forEach(b=>b.onclick=()=>{S.act=b.dataset.id;S.volverA='acts';S.vista='act';pintar();window.scrollTo(0,0);});
   };
+  document.querySelectorAll('#ordA .chip').forEach(b=>b.onclick=()=>{S.ordenA=b.dataset.o;dbPut('meta',{k:'ordenA',v:S.ordenA});pinta();});
   pinta();
   $('#busA').oninput=e=>{S.qa=e.target.value;clearTimeout(S._qa);S._qa=setTimeout(pinta,200);};
   $('#nAct').onclick=async()=>{const a=normA({id:'a'+uid(),proyecto:S.proy,nombre:(S.qa||'').trim(),creado:ahora(),actualizado:ahora()});actividades.push(a);await dbPut('actividades',a);programar();S.qa='';S.act=a.id;S.volverA='acts';S.vista='act';S.nueva=true;pintar();window.scrollTo(0,0);};

@@ -66,6 +66,11 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 
 - Archivos 3D guardados en el repo privado de datos: enlace `repo:visores/<archivo>.html`; la app lo baja con la llave y lo muestra en el visor (no queda público).
 
+## Versión 8.2
+
+- Actividades con orden: «Orden de trabajo» por defecto (etapas según antecesoras: primero lo que se puede hacer ya), «Por capítulo» y «Por estado».
+- Inicio: botón «Actividades» que muestra las tareas abiertas en orden de elaboración, por etapa y actividad; las que no tienen actividad van al final.
+
 ## Pendiente
 
 - Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).
