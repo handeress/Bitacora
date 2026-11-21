@@ -55,6 +55,13 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - Ficha reordenada: título y qué hay que hacer arriba; proyecto, Para Claude, responsable, fecha límite, historial, duplicar y borrar en «Más datos» plegado.
 - «Pasar líneas a materiales»: cada línea del texto pasa a Materiales y los enlaces a Planos y documentos.
 
+## Versión 8.0
+
+- Actividades por proyecto (pestaña Actividades): código, capítulo, unidad, cantidad, marca Futuro, proceso ordenado con tipo, materiales por unidad (con total), herramientas y equipo, antecesoras (bloqueada hasta que estén completas) y archivos (plano, despiece, 3D, documento) como enlaces. El 3D se ve dentro de la app (visor o Drive en modo vista previa).
+- Cada tarea puede colgar de una actividad (`actividad`). «+ Tarea con el proceso y los materiales» genera la tarea con las etapas y los materiales × cantidad.
+- Estado de la actividad: completa (todas sus tareas terminadas), bloqueada, en curso o lista para empezar.
+- Buzón con `"min": 8` y `"actividades": [...]`; `borrar` también quita actividades.
+
 ## Pendiente
 
 - Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).
