@@ -122,6 +122,13 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 .lin button{background:none;border:0;color:var(--acento);font-weight:600;padding:8px 0}
 .seg button.on[data-p]{background:var(--tinta)}
 .seg button.on[data-p=alta]{background:var(--rojo)}
+.grupos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px}
+.grupos.cuatro{grid-template-columns:repeat(4,1fr)}
+.gr{background:var(--hoja);border:1px solid var(--linea);border-radius:12px;padding:6px 4px;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.gr b{font-size:19px;line-height:1;color:var(--proy)}
+.gr span{font-size:13px;white-space:nowrap}
+.gr small{font-size:11px;color:var(--rojo);font-weight:700}
+.gr.cero{opacity:.45}
 .oculto{display:none!important}
 </style>
 </head>
@@ -142,7 +149,7 @@ label.et{display:block;font-size:12px;letter-spacing:.07em;text-transform:upperc
 
 <script>
 'use strict';
-const VERSION='6.1';
+const VERSION='7.0';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -190,7 +197,7 @@ const dbClear=s=>tx(s,'readwrite',o=>o.clear());
 
 /* ---------- estado ---------- */
 let proyectos=[], tareas=[], visitas=[];
-const S={vista:'tareas', proy:'', filtro:'abiertas', tipo:'todos', sesion:false, marca:'', panel:'', buscar:false, q:'', tarea:null, urls:[]};
+const S={vista:'tareas', proy:'', grupo:'', verTerm:false, nueva:false, q:'', tarea:null, urls:[]};
 const $=s=>document.querySelector(s);
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
@@ -226,95 +233,111 @@ function pintar(){
   else if(S.vista==='visita'){cabecera();vistaVisita();}
   else if(S.vista==='diario'){cabecera();vistaDiario();}
   else {cabecera();vistaMas();}
+  marcarHistoria();
 }
+function hondo(){return S.vista==='ficha'||(S.vista==='tareas'&&!!S.grupo);}
+function marcarHistoria(){ if(hondo()&&!(history.state&&history.state.b)) history.pushState({b:1},''); }
+window.addEventListener('popstate',()=>{ if(S.vista==='ficha') cerrarFicha(); else if(S.vista==='tareas'&&S.grupo) salirGrupo(); });
 function cabecera(){
+  if(S.vista==='tareas'&&S.grupo){
+    $('#cab').innerHTML='<button class="atras" id="atrG" aria-label="Volver">←</button><h1>'+esc(nomGrupo(S.grupo))+' · '+esc(nombreProy(S.proy))+'</h1>';
+    $('#atrG').onclick=salirGrupo; return;
+  }
   const act=proyectos.filter(p=>p.estado!=='cerrado'||p.id===S.proy);
   $('#cab').innerHTML='<h1>Bitácora</h1><select id="selProy" aria-label="Proyecto">'+
     act.map(p=>'<option value="'+esc(p.id)+'"'+(p.id===S.proy?' selected':'')+'>'+esc(p.nombre)+'</option>').join('')+'</select>';
-  $('#selProy').onchange=e=>{S.proy=e.target.value;dbPut('meta',{k:'proy',v:S.proy});pintar();};
+  $('#selProy').onchange=e=>{S.proy=e.target.value;S.q='';dbPut('meta',{k:'proy',v:S.proy});pintar();};
 }
+function salirGrupo(){S.grupo='';S.q='';S.verTerm=false;pintar();window.scrollTo(0,0);}
 
-/* ---------- lista de tareas ---------- */
+/* ---------- inicio por grupos y lista de un grupo ---------- */
+const GRUPOS_EXTRA={sin:'Sin tipo',sesion:'Sesión',claude:'Para Claude',terminadas:'Terminadas'};
+const nomGrupo=g=>GRUPOS_EXTRA[g]||tipoNom(g)||g;
+function enGrupo(t,g){
+  if(g==='terminadas') return t.estado==='terminado';
+  if(g==='sesion') return t.sesion;
+  if(g==='claude') return t.claude;
+  if(t.estado==='terminado') return S.verTerm&&(g==='sin'?!tipoNom(t.tipo):t.tipo===g);
+  return g==='sin'?!tipoNom(t.tipo):t.tipo===g;
+}
 function delProyecto(){return tareas.filter(t=>t.proyecto===S.proy);}
 function vencida(t){return t.limite&&t.estado!=='terminado'&&t.limite<hoy();}
 function guardarSimple(t){ t.actualizado=ahora(); dbPut('tareas',t); programar(); }
+const PESO={proceso:0,pendiente:1,terminado:2}, PP={alta:0,'':1,baja:2};
+const ordenT=(x,y)=>PESO[x.estado]-PESO[y.estado]||PP[x.prioridad]-PP[y.prioridad]||(x.creado<y.creado?-1:1);
+function filaTarea(t,conTipo){
+  const s=[];
+  if(conTipo&&tipoNom(t.tipo)) s.push(tipoNom(t.tipo));
+  if(t.estado==='proceso') s.push('En proceso');
+  if(t.responsable) s.push(esc(t.responsable));
+  if(t.limite) s.push('<span class="'+(vencida(t)?'venc':'')+'">'+(vencida(t)?'Venció ':'Para ')+fecha(t.limite)+'</span>');
+  if(t.pasos.length){ const sg=t.pasos.find(x=>!x.hecho); s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' etapas'+(sg&&sg.texto?' · Sigue: '+esc(sg.texto):'')); }
+  if(t.docs.length) s.push(t.docs.length+(t.docs.length===1?' plano':' planos'));
+  const pm=t.medidas.filter(m=>m.valor===''&&m.nombre).length; if(pm) s.push(pm+' por medir');
+  const fm=t.materiales.filter(m=>!m.listo).length; if(fm) s.push(fm+(fm===1?' material falta':' materiales faltan'));
+  if((t.fotos||[]).length) s.push(t.fotos.length+(t.fotos.length===1?' foto':' fotos'));
+  if(t.claude) s.push('Para Claude');
+  return '<div class="fila vf '+t.estado+(t.prioridad==='baja'?' baja':'')+'"><button class="abre" data-id="'+t.id+'"><span class="punto '+t.estado+'"></span><span><div class="t">'+(t.prioridad==='alta'?'<span class="pri">ALTA</span>':'')+esc(t.titulo||'(sin título)')+'</div>'+(s.length?'<div class="s">'+s.join(' · ')+'</div>':'')+'</span></button><button class="ses'+(t.sesion?' on':'')+'" data-id="'+t.id+'" aria-label="En la sesión">'+(t.sesion?'★':'☆')+'</button></div>';
+}
+function porTema(lista,conTipo){
+  const g={}; lista.forEach(t=>{const k=(t.tema||'Sin clasificar').trim()||'Sin clasificar';(g[k]=g[k]||[]).push(t);});
+  return Object.keys(g).sort((x,y)=>{const ia=TEMAS.indexOf(x),ib=TEMAS.indexOf(y);return (ia<0?50:ia)-(ib<0?50:ib)||x.localeCompare(y);})
+    .map(k=>'<h2 class="tema"><span>'+esc(k)+'</span><span>'+g[k].length+'</span></h2>'+g[k].sort(ordenT).map(t=>filaTarea(t,conTipo)).join('')).join('');
+}
+const textoDe=t=>(t.titulo+' '+t.detalle+' '+t.respuesta+' '+t.tema+' '+t.responsable+' '+tipoNom(t.tipo)+' '+t.pasos.map(x=>x.texto).join(' ')+' '+t.materiales.map(x=>x.nombre).join(' ')+' '+t.medidas.map(x=>x.nombre).join(' ')).toLowerCase();
 async function vistaTareas(){
-  const todas=delProyecto();
-  const n={abiertas:0,pendiente:0,proceso:0,terminado:0};
-  todas.forEach(t=>{n[t.estado]++; if(t.estado!=='terminado') n.abiertas++;});
-  const base=todas.filter(t=>S.filtro==='todas'||(S.filtro==='abiertas'?t.estado!=='terminado':t.estado===S.filtro));
-  const nt={sin:0}; TIPOS.forEach(x=>nt[x[0]]=0); base.forEach(t=>{ if(nt[t.tipo]===undefined||!t.tipo) nt.sin++; else nt[t.tipo]++; });
-  let lista=base;
-  if(S.tipo!=='todos') lista=lista.filter(t=>S.tipo==='sin'?!tipoNom(t.tipo):t.tipo===S.tipo);
-  if(S.sesion) lista=lista.filter(t=>t.sesion);
-  if(S.marca==='alta') lista=lista.filter(t=>t.prioridad==='alta');
-  if(S.marca==='claude') lista=lista.filter(t=>t.claude);
-  const q=S.q.trim().toLowerCase();
-  if(q) lista=lista.filter(t=>(t.titulo+' '+t.detalle+' '+t.respuesta+' '+t.tema+' '+t.responsable+' '+tipoNom(t.tipo)).toLowerCase().includes(q));
-  const nSes=todas.filter(t=>t.sesion).length;
-  const grupos={};
-  lista.forEach(t=>{(grupos[t.tema||'Sin clasificar']=grupos[t.tema||'Sin clasificar']||[]).push(t);});
-  const orden=Object.keys(grupos).sort((x,y)=>{const ia=TEMAS.indexOf(x),ib=TEMAS.indexOf(y);return (ia<0?50:ia)-(ib<0?50:ib)||x.localeCompare(y);});
-  const peso={proceso:0,pendiente:1,terminado:2}, pp={alta:0,'':1,baja:2};
-  let h='<div class="rapida"><input type="text" id="rap" placeholder="Anotar tarea rápida…" enterkeyhint="done" autocomplete="off"><button class="btn" id="rapOk">+</button></div>';
-  if(instalar) h+='<div class="aviso" style="display:flex;gap:10px;align-items:center"><span style="flex:1">Instala Bitácora en la pantalla del celular.</span><button class="btn" id="bInst">Instalar</button></div>';
-  if(sinc.pide) h+='<div class="aviso">Claude dejó datos que necesitan la versión nueva de la app. Ciérrala y ábrela dos veces con internet.</div>';
-  if(!(sinc.token&&!sinc.error)&&tareas.length){
-    const mr=await dbGet('meta','respaldo'); const dias=mr?Math.floor((Date.now()-new Date(mr.v))/864e5):null;
-    if(dias===null||dias>7) h+='<div class="aviso">'+(dias===null?'Sin sincronización ni respaldo todavía.':'Hace '+dias+' días que no haces respaldo.')+' Ve a Más.</div>';
+  let h='<div class="rapida"><input type="search" id="bus" placeholder="Buscar en '+esc(S.grupo?nomGrupo(S.grupo):nombreProy(S.proy))+'…" value="'+esc(S.q)+'" enterkeyhint="search" autocomplete="off"><button class="btn" id="bNueva" aria-label="Nueva tarea" style="font-size:22px;min-width:52px">+</button></div>';
+  if(!S.grupo){
+    if(instalar) h+='<div class="aviso" style="display:flex;gap:10px;align-items:center"><span style="flex:1">Instala Bitácora en la pantalla del celular.</span><button class="btn" id="bInst">Instalar</button></div>';
+    if(sinc.pide) h+='<div class="aviso">Claude dejó datos que necesitan la versión nueva de la app. Ciérrala y ábrela dos veces con internet.</div>';
+    if(!(sinc.token&&!sinc.error)&&tareas.length){
+      const mr=await dbGet('meta','respaldo'); const dias=mr?Math.floor((Date.now()-new Date(mr.v))/864e5):null;
+      if(dias===null||dias>7) h+='<div class="aviso">'+(dias===null?'Sin sincronización ni respaldo todavía.':'Hace '+dias+' días que no haces respaldo.')+' Ve a Más.</div>';
+    }
   }
-  const EN={abiertas:'Abiertas',pendiente:'Pendientes',proceso:'En proceso',terminado:'Terminadas',todas:'Todas'};
-  const cEst=S.filtro==='todas'?todas.length:n[S.filtro];
-  h+='<div class="barra"><button id="fEst" class="'+(S.panel==='estado'||S.marca?'on':'')+'">'+EN[S.filtro]+' <b>'+cEst+'</b>'+(S.marca?' ·':'')+' ▾</button>'+
-     '<button id="fTipo" class="'+(S.panel==='tipo'||S.tipo!=='todos'?'on':'')+'">'+(S.tipo==='todos'?'Tipo':S.tipo==='sin'?'Sin tipo':tipoNom(S.tipo,1))+' ▾</button>'+
-     '<button id="fSes" class="'+(S.sesion?'on':'')+'">Sesión <b>'+nSes+'</b></button>'+
-     '<button id="fBus" class="'+(S.buscar||q?'on':'')+'" aria-label="Buscar">🔍</button></div>';
-  const op=(g,k,txt,c,on)=>'<button data-g="'+g+'" data-k="'+k+'" class="'+(on?'on':'')+'"><span>'+txt+'</span><b>'+c+'</b></button>';
-  if(S.panel==='estado'){
-    h+='<div class="panel">'+['abiertas','pendiente','proceso','terminado','todas'].map(k=>op('e',k,EN[k],k==='todas'?todas.length:n[k],S.filtro===k)).join('')+
-       '<div class="sep">Marcas</div>'+op('m','alta','Prioridad alta',base.filter(t=>t.prioridad==='alta').length,S.marca==='alta')+op('m','claude','Para Claude',base.filter(t=>t.claude).length,S.marca==='claude')+'</div>';
-  }
-  if(S.panel==='tipo'){
-    h+='<div class="panel">'+op('t','todos','Todos',base.length,S.tipo==='todos')+TIPOS.map(x=>op('t',x[0],x[1],nt[x[0]],S.tipo===x[0])).join('')+op('t','sin','Sin tipo',nt.sin,S.tipo==='sin')+'</div>';
-  }
-  if(S.buscar||q) h+='<input type="search" id="bus" placeholder="Buscar" value="'+esc(S.q)+'" style="margin-bottom:8px">';
-  if(S.sesion) h+='<div class="lin"><span>Sesión de trabajo: '+nSes+(nSes===1?' tarea':' tareas')+'</span>'+(nSes?'<button id="vacSes">Vaciar sesión</button>':'')+'</div>';
-  if(!lista.length) h+='<div class="vacio">'+(todas.length?(S.sesion&&!nSes?'La sesión está vacía.<br>Toca la estrella de las tareas que vas a trabajar.':'Nada con este filtro.'):'Sin tareas en '+esc(nombreProy(S.proy))+'.<br>Anota la primera arriba.')+'</div>';
-  orden.forEach(g=>{
-    const ts=grupos[g].sort((x,y)=>pp[x.prioridad]-pp[y.prioridad]||peso[x.estado]-peso[y.estado]||(x.creado<y.creado?-1:1));
-    h+='<h2 class="tema"><span>'+esc(g)+'</span><span>'+ts.length+'</span></h2>';
-    ts.forEach(t=>{
-      const s=[];
-      if(tipoNom(t.tipo)) s.push(tipoNom(t.tipo));
-      if(t.estado==='proceso') s.push('En proceso');
-      if(t.responsable) s.push(esc(t.responsable));
-      if(t.limite) s.push('<span class="'+(vencida(t)?'venc':'')+'">'+(vencida(t)?'Venció ':'Para ')+fecha(t.limite)+'</span>');
-      if(t.pasos.length){ const sg=t.pasos.find(x=>!x.hecho); s.push(t.pasos.filter(x=>x.hecho).length+'/'+t.pasos.length+' etapas'+(sg&&sg.texto?' · Sigue: '+esc(sg.texto):'')); }
-      if(t.docs.length) s.push(t.docs.length+(t.docs.length===1?' plano':' planos'));
-      const pm=t.medidas.filter(m=>m.valor===''&&m.nombre).length; if(pm) s.push(pm+' por medir');
-      const fm=t.materiales.filter(m=>!m.listo).length; if(fm) s.push(fm+(fm===1?' material falta':' materiales faltan'));
-      const nm=t.medidas.filter(m=>m.valor!=='').length; if(nm) s.push(nm+(nm===1?' medida':' medidas'));
-      if((t.fotos||[]).length) s.push(t.fotos.length+(t.fotos.length===1?' foto':' fotos'));
-      if(t.claude) s.push('Para Claude');
-      h+='<div class="fila vf '+t.estado+(t.prioridad==='baja'?' baja':'')+'"><button class="abre" data-id="'+t.id+'"><span class="punto '+t.estado+'"></span><span><div class="t">'+(t.prioridad==='alta'?'<span class="pri">ALTA</span>':'')+esc(t.titulo||'(sin título)')+'</div>'+(s.length?'<div class="s">'+s.join(' · ')+'</div>':'')+'</span></button><button class="ses'+(t.sesion?' on':'')+'" data-id="'+t.id+'" aria-label="En la sesión">'+(t.sesion?'★':'☆')+'</button></div>';
-    });
-  });
+  h+='<div id="cuerpo"></div>';
   $('#main').innerHTML=h;
-  const re=()=>{const y=window.scrollY;return vistaTareas().then(()=>window.scrollTo(0,y));};
-  const add=async()=>{const i=$('#rap');const v=i.value.trim();if(!v)return;const t=await nuevaTarea({titulo:v,tipo:tipoNom(S.tipo)?S.tipo:'',sesion:S.sesion});i.value='';S.tarea=t.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);};
+  cuerpoTareas();
   const bi=$('#bInst'); if(bi) bi.onclick=async()=>{const ev=instalar; if(!ev)return; ev.prompt(); try{await ev.userChoice;}catch(e){} instalar=null; vistaTareas();};
-  $('#rapOk').onclick=add; $('#rap').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add();}};
-  $('#fEst').onclick=()=>{S.panel=S.panel==='estado'?'':'estado';re();};
-  $('#fTipo').onclick=()=>{S.panel=S.panel==='tipo'?'':'tipo';re();};
-  $('#fSes').onclick=()=>{S.sesion=!S.sesion;S.panel='';re();};
-  $('#fBus').onclick=()=>{S.buscar=!S.buscar;if(!S.buscar)S.q='';S.panel='';vistaTareas().then(()=>{const x=$('#bus');if(x)x.focus();});};
-  document.querySelectorAll('.panel button').forEach(c=>c.onclick=()=>{const g=c.dataset.g,k=c.dataset.k;
-    if(g==='e'){S.filtro=k;S.panel='';} else if(g==='t'){S.tipo=k;S.panel='';} else {S.marca=S.marca===k?'':k;}
-    vistaTareas();});
-  const vs=$('#vacSes'); if(vs) vs.onclick=()=>{if(!confirm('¿Sacar todas las tareas de la sesión? Las tareas no se borran.'))return;todas.filter(t=>t.sesion).forEach(t=>{t.sesion=false;guardarSimple(t);});S.sesion=false;vistaTareas();};
-  document.querySelectorAll('.vf .abre').forEach(f=>f.onclick=()=>{S.tarea=f.dataset.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);});
-  document.querySelectorAll('.vf .ses').forEach(f=>f.onclick=()=>{const t=tareas.find(x=>x.id===f.dataset.id);t.sesion=!t.sesion;guardarSimple(t);re();});
-  const bq=$('#bus'); if(bq) bq.oninput=()=>{S.q=bq.value;clearTimeout(bq._t);bq._t=setTimeout(()=>vistaTareas().then(()=>{const x=$('#bus');if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length);}}),350);};
+  $('#bNueva').onclick=async()=>{const g=S.grupo;
+    const t=await nuevaTarea({titulo:S.q.trim(),tipo:tipoNom(g)?g:'',sesion:g==='sesion',claude:g==='claude'});
+    S.q='';S.tarea=t.id;S.volver='tareas';S.vista='ficha';S.nueva=true;pintar();window.scrollTo(0,0);};
+  const bq=$('#bus'); bq.oninput=()=>{S.q=bq.value;clearTimeout(bq._t);bq._t=setTimeout(cuerpoTareas,200);};
+  bq.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();bq.blur();}};
+}
+function cuerpoTareas(){
+  const todas=delProyecto(), q=S.q.trim().toLowerCase(), g=S.grupo; let h='';
+  if(!todas.length&&!q){ h='<div class="vacio">Sin tareas en '+esc(nombreProy(S.proy))+'.<br>Toca + para crear la primera.</div>'; }
+  else if(q){
+    const base=g?todas.filter(t=>g==='terminadas'||g==='sesion'||g==='claude'?enGrupo(t,g):(g==='sin'?!tipoNom(t.tipo):t.tipo===g)):todas;
+    const r=base.filter(t=>textoDe(t).includes(q));
+    h='<div class="lin"><span>'+r.length+(r.length===1?' resultado':' resultados')+(r.some(t=>t.estado==='terminado')?' (incluye terminadas)':'')+'</span></div>';
+    h+=r.length?porTema(r,!g||!tipoNom(g)):'<div class="vacio">Nada con «'+esc(S.q.trim())+'».<br>Toca + para crearla con ese nombre.</div>';
+  }
+  else if(!g){
+    const ab=todas.filter(t=>t.estado!=='terminado');
+    const pri=ab.filter(t=>t.prioridad==='alta').sort(ordenT);
+    if(pri.length) h+='<h2 class="tema"><span>Prioritarias</span><span>'+pri.length+'</span></h2>'+pri.map(t=>filaTarea(t,true)).join('');
+    const cnt=k=>ab.filter(t=>k==='sin'?!tipoNom(t.tipo):t.tipo===k).length;
+    const tile=(k,nom,n,al)=>'<button class="gr'+(n?'':' cero')+'" data-g="'+k+'"><b>'+n+'</b><span>'+esc(nom)+'</span>'+(al?'<small>'+al+' alta</small>':'')+'</button>';
+    const alt=k=>ab.filter(t=>t.prioridad==='alta'&&(k==='sin'?!tipoNom(t.tipo):t.tipo===k)).length;
+    h+='<h2 class="tema"><span>Por tipo · abiertas</span><span>'+ab.length+'</span></h2><div class="grupos">'+TIPOS.map(x=>tile(x[0],x[2],cnt(x[0]),alt(x[0]))).join('')+'</div>';
+    h+='<div class="grupos cuatro">'+tile('sin','Sin tipo',cnt('sin'),alt('sin'))+tile('sesion','★ Sesión',todas.filter(t=>t.sesion).length)+tile('claude','Claude',todas.filter(t=>t.claude).length)+tile('terminadas','Hechas',todas.filter(t=>t.estado==='terminado').length)+'</div>';
+  }
+  else{
+    const l=todas.filter(t=>enGrupo(t,g));
+    if(g==='sesion'&&l.length) h+='<div class="lin"><span>'+l.length+(l.length===1?' tarea':' tareas')+' en la sesión</span><button id="vacSes">Vaciar sesión</button></div>';
+    h+=l.length?porTema(l,!tipoNom(g)):'<div class="vacio">'+(g==='sesion'?'La sesión está vacía.<br>Toca la estrella de las tareas que vas a trabajar.':g==='claude'?'Ninguna marcada Para Claude.':'Nada abierto en este grupo.')+'</div>';
+    if(tipoNom(g)||g==='sin'){ const nt=todas.filter(t=>t.estado==='terminado'&&(g==='sin'?!tipoNom(t.tipo):t.tipo===g)).length;
+      if(nt) h+='<div class="lin" style="margin-top:12px"><span>'+nt+(nt===1?' terminada':' terminadas')+'</span><button id="verTerm">'+(S.verTerm?'Ocultar':'Ver')+'</button></div>'; }
+  }
+  const c=$('#cuerpo'); if(!c) return; c.innerHTML=h;
+  const re=()=>{const y=window.scrollY;cuerpoTareas();window.scrollTo(0,y);};
+  c.querySelectorAll('.gr').forEach(b=>b.onclick=()=>{S.grupo=b.dataset.g;S.q='';S.verTerm=false;pintar();window.scrollTo(0,0);});
+  c.querySelectorAll('.vf .abre').forEach(f=>f.onclick=()=>{S.tarea=f.dataset.id;S.volver='tareas';S.vista='ficha';pintar();window.scrollTo(0,0);});
+  c.querySelectorAll('.vf .ses').forEach(f=>f.onclick=()=>{const t=tareas.find(x=>x.id===f.dataset.id);t.sesion=!t.sesion;guardarSimple(t);re();});
+  const vs=$('#vacSes'); if(vs) vs.onclick=()=>{if(!confirm('¿Sacar todas las tareas de la sesión? Las tareas no se borran.'))return;todas.filter(t=>t.sesion).forEach(t=>{t.sesion=false;guardarSimple(t);});re();};
+  const vt=$('#verTerm'); if(vt) vt.onclick=()=>{S.verTerm=!S.verTerm;re();};
 }
 function opcTemas(sel){const l=[...new Set(TEMAS.concat(tareas.map(x=>x.tema).filter(Boolean),sel?[sel]:[]))];
   return l.map(x=>'<option value="'+esc(x)+'"'+(x===sel?' selected':'')+'>'+esc(x)+'</option>').join('')+'<option value="__nuevo">+ Tema nuevo…</option>';}
@@ -369,15 +392,19 @@ function vistaFicha(){
   $('#masPaso').onclick=()=>{t.pasos.push({texto:'',tipo:'',hecho:false});guardar(t);pintarPasos(t);const f=document.querySelectorAll('#pasos input[type=text]');f[f.length-1].focus();};
   $('#masMat').onclick=()=>{t.materiales.push({nombre:'',cantidad:'',unidad:'und',listo:false});guardar(t);pintarMats(t);const f=document.querySelectorAll('#mats input[data-c=nombre]');f[f.length-1].focus();};
   pintarFotos(t);pintarHist(t);
+  if(S.nueva){S.nueva=false;setTimeout(()=>{const f=$('#fTit');if(f)f.focus();},50);}
   $('#masMed').onclick=()=>{t.medidas.push({nombre:'',valor:'',unidad:'m'});guardar(t);pintarMeds(t);const f=document.querySelectorAll('#meds .med input');if(f.length)f[f.length-2].focus();};
   $('#bCam').onclick=()=>$('#inCam').click(); $('#bGal').onclick=()=>$('#inGal').click();
-  const gua=()=>{if(!t.titulo.trim()){toast('Ponle nombre a la tarea');$('#fTit').focus();return;}S.volver='tareas';cerrarFicha();window.scrollTo(0,0);toast('Guardada');};
+  const gua=()=>{if(vacia(t)){cerrarFicha();return;}if(!t.titulo.trim()){toast('Ponle nombre a la tarea');$('#fTit').focus();return;}S.volver='tareas';cerrarFicha();window.scrollTo(0,0);toast('Guardada');};
   $('#bGua').onclick=gua; $('#bGuaC').onclick=gua;
   $('#bDup').onclick=async()=>{const c=await nuevaTarea({proyecto:t.proyecto,tema:t.tema,titulo:t.titulo+' (copia)',detalle:t.detalle,responsable:t.responsable,pasos:t.pasos.map(x=>({texto:x.texto,tipo:x.tipo,hecho:false})),docs:t.docs.map(x=>({...x})),materiales:t.materiales.map(x=>({...x,listo:false}))});liberar();S.tarea=c.id;pintar();window.scrollTo(0,0);toast('Duplicada');};
   $('#bBor').onclick=async()=>{if(!confirm('¿Borrar esta tarea con sus fotos?'))return;clearTimeout(guardarT);await lapida(t.id);for(const f of t.fotos)await dbDel('fotos',f);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);programar();cerrarFicha();toast('Borrada');};
 }
 function liberar(){S.urls.forEach(u=>URL.revokeObjectURL(u));S.urls=[];}
-function cerrarFicha(){const t=tareas.find(x=>x.id===S.tarea);if(t){clearTimeout(guardarT);dbPut('tareas',t);}liberar();S.vista=S.volver||'tareas';S.tarea=null;pintar();}
+function vacia(t){return !t.titulo.trim()&&!t.detalle.trim()&&!t.respuesta.trim()&&!t.fotos.length&&!t.pasos.length&&!t.materiales.length&&!t.medidas.length&&!t.docs.length;}
+async function cerrarFicha(){const t=tareas.find(x=>x.id===S.tarea);
+  if(t){clearTimeout(guardarT); if(vacia(t)){await lapida(t.id);await dbDel('tareas',t.id);tareas=tareas.filter(x=>x.id!==t.id);programar();toast('Tarea vacía descartada');} else dbPut('tareas',t);}
+  liberar();S.vista=S.volver||'tareas';S.tarea=null;pintar();}
 function pintarSeg(t){
   $('#seg').innerHTML=Object.keys(ESTADOS).map(e=>'<button data-e="'+e+'" class="'+(t.estado===e?'on':'')+'">'+ESTADOS[e]+'</button>').join('');
   document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
@@ -739,7 +766,7 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();instalar=e;
 window.addEventListener('appinstalled',()=>{instalar=null;toast('App instalada');if(S.vista==='tareas')vistaTareas();});
 
 /* ---------- navegación ---------- */
-document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{S.vista=b.dataset.v;pintar();window.scrollTo(0,0);});
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{if(b.dataset.v==='tareas'&&S.vista==='tareas'){S.grupo='';S.q='';}S.vista=b.dataset.v;pintar();window.scrollTo(0,0);});
 window.addEventListener('pagehide',()=>{ guardarYa(); sincronizar(); });
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 iniciar().catch(e=>{$('#main').innerHTML='<div class="vacio">No se pudo abrir la base de datos de la app.<br>'+esc(e&&e.message||e)+'</div>';});

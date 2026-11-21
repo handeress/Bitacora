@@ -43,6 +43,12 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - Varios aparatos (celular y PC) con la misma llave: cada sincronización baja `app/tareas.json`, junta tarea por tarea (gana la más reciente por `actualizado`), aplica lápidas de borrado (`borradas`) y baja las fotos que falten; después sube el estado junto. `aplicadas` registra qué archivos del buzón ya se aplicaron, para que un aparato nuevo no los repita. Si otro aparato subió al mismo tiempo, se reintenta.
 - Sincroniza al abrir, al cerrar o pasar a segundo plano (guarda primero la ficha abierta), al recuperar internet y cada minuto mientras está abierta (6.1).
 
+## Versión 7.0
+
+- Inicio por grupos: arriba buscador y botón + (tarea nueva). Debajo las prioritarias (prioridad alta abiertas) y botones por tipo con el conteo de abiertas, más Sin tipo, Sesión, Para Claude y Hechas. Al tocar un grupo se ve su lista por tema; + dentro de un grupo crea la tarea con ese tipo.
+- El buscador busca en el proyecto (o en el grupo abierto), también en etapas, materiales y medidas. Si no encuentra, + crea la tarea con lo escrito.
+- Una tarea nueva que se cierra sin nada escrito se descarta. El botón atrás del celular sale de la ficha o del grupo.
+
 ## Pendiente
 
 - Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).
