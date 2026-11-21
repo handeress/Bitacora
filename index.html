@@ -169,7 +169,7 @@ nav button{font-size:12.5px}
 
 <script>
 'use strict';
-const VERSION='8.0';
+const VERSION='8.1';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -562,7 +562,15 @@ function vistaActs(){
 let guardarAT;
 function guardarA(a){a.actualizado=ahora();clearTimeout(guardarAT);guardarAT=setTimeout(()=>dbPut('actividades',a),300);programar();}
 function cerrarAct(){const a=actividades.find(x=>x.id===S.act);if(a){clearTimeout(guardarAT);dbPut('actividades',a);}S.vista=S.volverA||'acts';S.act=null;pintar();window.scrollTo(0,0);}
-function abrir3D(u){ if(/drive\.google\.com\/file\/d\//.test(u)) u=u.replace(/\/(view|edit)(\?.*)?$/,'/preview'); $('#v3d iframe').src=u; $('#v3d').classList.add('on'); }
+const cache3D={};
+async function abrir3D(u){
+  if(u.startsWith('repo:')){ const ruta=u.slice(5);
+    if(!cache3D[ruta]){ if(!sinc.token) return toast('Falta la llave de GitHub (Más)'); if(!navigator.onLine) return toast('Sin internet para bajar el 3D');
+      toast('Cargando 3D…'); try{ const r=await gh(ruta,{headers:{'Accept':'application/vnd.github.raw+json'}}); if(!r.ok) throw falla(r);
+        cache3D[ruta]=URL.createObjectURL(new Blob([await r.text()],{type:'text/html'})); }catch(e){ return toast('No se pudo cargar el 3D'); } }
+    u=cache3D[ruta]; }
+  else if(/drive\.google\.com\/file\/d\//.test(u)) u=u.replace(/\/(view|edit)(\?.*)?$/,'/preview');
+  $('#v3d iframe').src=u; $('#v3d').classList.add('on'); }
 function vistaAct(){
   const a=actividades.find(x=>x.id===S.act); if(!a){S.vista='acts';return pintar();}
   $('#cab').innerHTML='<button class="atras" id="atras" aria-label="Volver">←</button><h1>'+esc((a.codigo?a.codigo+' · ':'')+(a.nombre||'Actividad'))+'</h1><button class="guardar" id="bGuaA">Listo</button>';
@@ -600,7 +608,7 @@ function vistaAct(){
       materiales:a.materiales.filter(m=>m.nombre).map(m=>({nombre:m.nombre,cantidad:m.cantidad?fmtx(numx(m.cantidad)*q):'',unidad:MAT_UNID.includes(m.unidad)?m.unidad:'otro',listo:false}))});
     autoEtapas(t); guardarSimple(t); clearTimeout(guardarAT); dbPut('actividades',a); S.tarea=t.id;S.volver='act';S.vista='ficha';pintar();window.scrollTo(0,0);};
   const pArch=()=>{$('#aArch').innerHTML=a.archivos.map((d,i)=>'<div class="dos" style="align-items:center"><a href="'+esc(d.url)+'" data-i="'+i+'" target="_blank" rel="noopener"><span class="etq">'+esc(d.tipo||'Documento')+'</span> '+esc(d.nombre||'Archivo')+(d.tipo==='3D'?'<small>Toca para ver el 3D aquí</small>':'')+'</a><button class="x" data-i="'+i+'" style="flex:none;width:40px;background:none;border:0;color:var(--gris);font-size:20px" aria-label="Quitar">✕</button></div>').join('')||'<div class="s" style="color:var(--gris);font-size:14px;margin-bottom:6px">Sin archivos.</div>';
-    document.querySelectorAll('#aArch a').forEach(x=>x.onclick=e=>{const d=a.archivos[+x.dataset.i];if(d.tipo==='3D'){e.preventDefault();abrir3D(d.url);}});
+    document.querySelectorAll('#aArch a').forEach(x=>x.onclick=e=>{const d=a.archivos[+x.dataset.i];if(d.tipo==='3D'||d.url.startsWith('repo:')){e.preventDefault();abrir3D(d.url);}});
     document.querySelectorAll('#aArch .x').forEach(x=>x.onclick=()=>{if(!confirm('¿Quitar este enlace? El archivo sigue en Drive.'))return;a.archivos.splice(+x.dataset.i,1);guardarA(a);pArch();});};
   pArch();
   $('#arAdd').onclick=()=>{const tp=$('#arT').value;const u=prompt(tp==='3D'?'Pega el enlace del visor 3D':'Pega el enlace del archivo en Drive');if(!u)return;

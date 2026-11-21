@@ -62,6 +62,10 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - Estado de la actividad: completa (todas sus tareas terminadas), bloqueada, en curso o lista para empezar.
 - Buzón con `"min": 8` y `"actividades": [...]`; `borrar` también quita actividades.
 
+## Versión 8.1
+
+- Archivos 3D guardados en el repo privado de datos: enlace `repo:visores/<archivo>.html`; la app lo baja con la llave y lo muestra en el visor (no queda público).
+
 ## Pendiente
 
 - Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).
