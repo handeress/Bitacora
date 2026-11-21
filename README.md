@@ -49,6 +49,12 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - El buscador busca en el proyecto (o en el grupo abierto), también en etapas, materiales y medidas. Si no encuentra, + crea la tarea con lo escrito.
 - Una tarea nueva que se cierra sin nada escrito se descarta. El botón atrás del celular sale de la ficha o del grupo.
 
+## Versión 7.1
+
+- Botón ✓ en cada fila: marca hecha la etapa que sigue (o la tarea, si no tiene etapas), con confirmación.
+- Ficha reordenada: título y qué hay que hacer arriba; proyecto, Para Claude, responsable, fecha límite, historial, duplicar y borrar en «Más datos» plegado.
+- «Pasar líneas a materiales»: cada línea del texto pasa a Materiales y los enlaces a Planos y documentos.
+
 ## Pendiente
 
 - Informe de visita en PDF (lo arma Claude desde `Bitacora-datos`).
