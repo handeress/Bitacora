@@ -174,7 +174,7 @@ nav button{font-size:12.5px}
 
 <script>
 'use strict';
-const VERSION='8.2';
+const VERSION='8.3';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -263,8 +263,16 @@ function pintar(){
   marcarHistoria();
 }
 function hondo(){return S.vista==='ficha'||S.vista==='act'||(S.vista==='tareas'&&!!S.grupo);}
-function marcarHistoria(){ if(hondo()&&!(history.state&&history.state.b)) history.pushState({b:1},''); }
-window.addEventListener('popstate',()=>{ if($('#v3d').classList.contains('on')){cerrar3D();if(hondo())history.pushState({b:1},'');return;} if(S.vista==='ficha') cerrarFicha(); else if(S.vista==='act') cerrarAct(); else if(S.vista==='tareas'&&S.grupo) salirGrupo(); });
+// Atrás por niveles: ficha o actividad → lista o grupo de donde vino → inicio (Tareas) → cierra la app.
+function nivBase(v){return v==='tareas'?(S.grupo?1:0):1;}
+function nivAct(){return nivBase(S.volverA||'acts')+1;}
+function nivel(){if(S.vista==='ficha')return S.volver==='act'?nivAct()+1:nivBase(S.volver||'tareas')+1;if(S.vista==='act')return nivAct();return nivBase(S.vista);}
+let ignorarPop=0;
+function marcarHistoria(){const L=nivel(),n=(history.state&&history.state.n)||0;if(L>n){for(let i=n+1;i<=L;i++)history.pushState({n:i},'');}else if(L===n)history.replaceState({n:L},'');else{ignorarPop++;history.go(L-n);}}
+window.addEventListener('popstate',e=>{ if(ignorarPop){ignorarPop--;return;}
+  if($('#v3d').classList.contains('on')){cerrar3D();history.pushState({n:nivel()},'');return;}
+  const n=(e.state&&e.state.n)||0; if(nivel()<=n){marcarHistoria();return;}
+  if(S.vista==='ficha') cerrarFicha(); else if(S.vista==='act') cerrarAct(); else if(S.vista==='tareas'&&S.grupo) salirGrupo(); else {S.vista='tareas';S.grupo='';S.q='';pintar();window.scrollTo(0,0);} });
 function cabecera(){
   if(S.vista==='tareas'&&S.grupo){
     $('#cab').innerHTML='<button class="atras" id="atrG" aria-label="Volver">←</button><h1>'+esc(nomGrupo(S.grupo))+' · '+esc(nombreProy(S.proy))+'</h1>';

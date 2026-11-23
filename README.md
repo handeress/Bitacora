@@ -87,3 +87,5 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - El repositorio es público: aquí no van datos de obras ni de clientes, solo código.
 - Los ids de proyecto son los de `proyectos.json` de Obras-base.
 - Después de un cambio: abrir con internet, cerrar y volver a abrir.
+
+- 23-nov-2026: atrás por niveles (subpágina → elemento → lista o inicio → cierra la app).
