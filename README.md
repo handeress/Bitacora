@@ -89,3 +89,5 @@ Dirección: https://handeress.github.io/Bitacora/ (activar GitHub Pages desde la
 - Después de un cambio: abrir con internet, cerrar y volver a abrir.
 
 - 23-nov-2026: atrás por niveles (subpágina → elemento → lista o inicio → cierra la app).
+
+- 8.4 (23-nov-2026): recuerda la vista, la tarea o actividad y el 3D abierto al recargar (12 h); el 3D guarda su vista y se recarga solo si el celular lo borra; abrir y cerrar el 3D ya no suma pasos al atrás.

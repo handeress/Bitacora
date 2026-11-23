@@ -174,7 +174,7 @@ nav button{font-size:12.5px}
 
 <script>
 'use strict';
-const VERSION='8.3';
+const VERSION='8.4';
 const PROY_BASE=[
   {id:'tibana-y-guaduas',nombre:'Tibaná y Guaduas',color:'#b45309'},
   {id:'silvania',nombre:'Silvania',color:'#1f6fb2'},
@@ -244,7 +244,7 @@ async function iniciar(){
   if(navigator.storage&&navigator.storage.persist) navigator.storage.persist();
   sinc.token=((await dbGet('meta','token'))||{}).v||''; sinc.borradas=((await dbGet('meta','borradas'))||{}).v||{}; sinc.aplicadas=((await dbGet('meta','entrada'))||{}).v||[];
   S.ordenA=((await dbGet('meta','ordenA'))||{}).v||'trabajo'; sinc.ultimo=((await dbGet('meta','sinc'))||{}).v||''; sinc.firma=((await dbGet('meta','firma'))||{}).v||'';
-  pintar(); sincronizar();
+  leerLugar(); pintar(); if(lugar3D){const u=lugar3D;lugar3D='';abrir3D(u);} sincronizar();
 }
 
 /* ---------- pintar ---------- */
@@ -268,7 +268,7 @@ function nivBase(v){return v==='tareas'?(S.grupo?1:0):1;}
 function nivAct(){return nivBase(S.volverA||'acts')+1;}
 function nivel(){if(S.vista==='ficha')return S.volver==='act'?nivAct()+1:nivBase(S.volver||'tareas')+1;if(S.vista==='act')return nivAct();return nivBase(S.vista);}
 let ignorarPop=0;
-function marcarHistoria(){const L=nivel(),n=(history.state&&history.state.n)||0;if(L>n){for(let i=n+1;i<=L;i++)history.pushState({n:i},'');}else if(L===n)history.replaceState({n:L},'');else{ignorarPop++;history.go(L-n);}}
+function marcarHistoria(){guardarLugar();const L=nivel(),n=(history.state&&history.state.n)||0;if(L>n){for(let i=n+1;i<=L;i++)history.pushState({n:i},'');}else if(L===n)history.replaceState({n:L},'');else{ignorarPop++;history.go(L-n);}}
 window.addEventListener('popstate',e=>{ if(ignorarPop){ignorarPop--;return;}
   if($('#v3d').classList.contains('on')){cerrar3D();history.pushState({n:nivel()},'');return;}
   const n=(e.state&&e.state.n)||0; if(nivel()<=n){marcarHistoria();return;}
@@ -544,7 +544,7 @@ function pintarHist(t){
   $('#hist').innerHTML=h;
 }
 $('#visor').onclick=()=>$('#visor').classList.remove('on');
-function cerrar3D(){$('#v3d').classList.remove('on');$('#v3d iframe').src='about:blank';}
+function cerrar3D(){$('#v3d').classList.remove('on');irIframe('about:blank');S.v3d='';guardarLugar();}
 $('#v3dX').onclick=cerrar3D;
 
 /* ---------- actividades ---------- */
@@ -606,15 +606,28 @@ function vistaActs(){
 let guardarAT;
 function guardarA(a){a.actualizado=ahora();clearTimeout(guardarAT);guardarAT=setTimeout(()=>dbPut('actividades',a),300);programar();}
 function cerrarAct(){const a=actividades.find(x=>x.id===S.act);if(a){clearTimeout(guardarAT);dbPut('actividades',a);}S.vista=S.volverA||'acts';S.act=null;pintar();window.scrollTo(0,0);}
+
+// 3D: la app le agrega al visor el código que guarda la vista y lo recarga si el celular lo borró.
+const VISOR_JS="/* Agregado por la app: recuerda la vista del 3D y lo recarga solo si el celular lo borr\u00f3 al cambiar de app. */\n(function(){\n  var K='visor3d:'+(window.__VK||location.pathname);\n  var cv=document.querySelector('canvas'), perdido=false;\n  if(cv)cv.addEventListener('webglcontextlost',function(){perdido=true;});\n  function glPerdido(){try{var g=cv&&(cv.getContext('webgl')||cv.getContext('experimental-webgl'));return perdido||(g&&g.isContextLost&&g.isContextLost());}catch(e){return perdido;}}\n  var V=window.__V||null,ok=!!(V&&V.cam&&V.state&&V.PARTS);\n  var cam=ok?V.cam:null,state=ok?V.state:null,PARTS=ok?V.PARTS:[],MOVS=ok?V.MOVS:[];\n  function leer(){if(!ok)return null;var M=MOVS||[];\n    return {cam:{t:cam.t.slice(),r:cam.r,yaw:cam.yaw,pitch:cam.pitch},f:state.f,clip:state.clip,cx:state.cx,ex:state.exT,\n      open:M.map(function(g){return g.oT;}),hid:PARTS.map(function(p){return p.hidden?1:0;}).join(''),vis:PARTS.map(function(p){return p.vis===false?0:1;}).join(''),t:Date.now()};}\n  var ult='';\n  function guardar(){var s=leer();if(!s)return;var j=JSON.stringify(Object.assign({},s,{t:0}));if(j===ult)return;ult=j;try{localStorage.setItem(K,JSON.stringify(s));}catch(e){}}\n  function poner(){var s;try{s=JSON.parse(localStorage.getItem(K)||'null');}catch(e){}\n    if(!s||!ok)return;\n    try{if(s.hid&&s.hid.length===PARTS.length)PARTS.forEach(function(p,i){p.hidden=s.hid[i]==='1';});}catch(e){}\n    try{if(s.vis&&s.vis.length===PARTS.length)PARTS.forEach(function(p,i){p.vis=s.vis[i]==='1';});}catch(e){}\n    try{if(s.f&&V.filtrar)V.filtrar(s.f);}catch(e){}\n    try{if(s.open&&s.open.length===MOVS.length&&MOVS.length){MOVS.forEach(function(g,i){g.oT=s.open[i];g.o=s.open[i];});if(V.syncOpen)V.syncOpen();}}catch(e){}\n    try{state.cx=s.cx||0;var cx=document.getElementById('cutX');if(cx)cx.value=state.cx;if(V.setClip)V.setClip(!!s.clip);}catch(e){}\n    try{state.exT=state.ex=s.ex||0;var ex=document.getElementById('exp');if(ex)ex.value=state.exT;}catch(e){}\n    try{if(s.cam){cam.t=s.cam.t;cam.r=s.cam.r;cam.yaw=s.cam.yaw;cam.pitch=s.cam.pitch;}if(V.markView)V.markView('');}catch(e){}\n    try{if(V.refresh)V.refresh();if(V.req)V.req();}catch(e){}\n    ult=JSON.stringify(Object.assign({},leer(),{t:0}));}\n  poner();\n  if(ok)setInterval(guardar,1000);\n  document.addEventListener('visibilitychange',function(){if(document.hidden){guardar();}else if(glPerdido()){guardar();location.reload();}});\n  window.addEventListener('pagehide',guardar);\n  window.addEventListener('pageshow',function(){if(glPerdido())location.reload();});\n})();\n",VISOR_EXP=";try{window.__V={cam:cam,state:state,PARTS:PARTS,MOVS:(typeof MOVS!=='undefined'?MOVS:[]),filtrar:(typeof filtrar==='function'?filtrar:null),syncOpen:(typeof syncOpen==='function'?syncOpen:null),setClip:(typeof setClip==='function'?setClip:null),markView:(typeof markView==='function'?markView:null),refresh:(typeof refresh==='function'?refresh:null),req:(typeof req==='function'?req:null)};}catch(e){}\n";
+function conGuardado(html,clave){let h=html;const a=h.indexOf('const cam=');if(a>=0){const fin=h.indexOf('</script',a),j=h.lastIndexOf('})();',fin);if(j>a)h=h.slice(0,j)+VISOR_EXP+h.slice(j);}const t='<script>window.__VK='+JSON.stringify(clave)+';'+VISOR_JS.replace(/<\/script/gi,'<\\/script')+'<\/script>';const i=h.toLowerCase().lastIndexOf('</body>');return i>=0?h.slice(0,i)+t+h.slice(i):h+t;}
+// Recuerda dónde estabas (vista, grupo, tarea o actividad y el 3D abierto) para volver ahí al recargar (hasta 12 h).
+const LUGAR_K='bi_lugar',LUGAR_C=['vista','grupo','tarea','act','volver','volverA','v3d'];let lugar3D='';
+function guardarLugar(){try{const o={t:Date.now()};LUGAR_C.forEach(k=>o[k]=S[k]);localStorage.setItem(LUGAR_K,JSON.stringify(o));}catch(e){}}
+function leerLugar(){try{const o=JSON.parse(localStorage.getItem(LUGAR_K)||'null');if(!o||Date.now()-o.t>12*3600e3)return;
+  if(o.vista==='ficha'&&!tareas.some(x=>x.id===o.tarea))return; if(o.vista==='act'&&!actividades.some(x=>x.id===o.act))return;
+  ['vista','grupo','tarea','act','volver','volverA'].forEach(k=>{if(o[k]!=null)S[k]=o[k];}); lugar3D=o.v3d||'';}catch(e){}}
 const cache3D={};
-async function abrir3D(u){
+async function abrir3D(u){const orig=u;
   if(u.startsWith('repo:')){ const ruta=u.slice(5);
     if(!cache3D[ruta]){ if(!sinc.token) return toast('Falta la llave de GitHub (Más)'); if(!navigator.onLine) return toast('Sin internet para bajar el 3D');
       toast('Cargando 3D…'); try{ const r=await gh(ruta,{headers:{'Accept':'application/vnd.github.raw+json'}}); if(!r.ok) throw falla(r);
-        cache3D[ruta]=URL.createObjectURL(new Blob([await r.text()],{type:'text/html'})); }catch(e){ return toast('No se pudo cargar el 3D'); } }
+        cache3D[ruta]=URL.createObjectURL(new Blob([conGuardado(await r.text(),'bitacora:'+ruta)],{type:'text/html'})); }catch(e){ return toast('No se pudo cargar el 3D'); } }
     u=cache3D[ruta]; }
   else if(/drive\.google\.com\/file\/d\//.test(u)) u=u.replace(/\/(view|edit)(\?.*)?$/,'/preview');
-  $('#v3d iframe').src=u; $('#v3d').classList.add('on'); }
+  S.v3d=orig; guardarLugar();
+  irIframe(u); $('#v3d').classList.add('on'); }
+// Cambiar el 3D sin sumar pasos al atrás del celular.
+function irIframe(u){const f=$('#v3d iframe');try{f.contentWindow.location.replace(u);}catch(e){f.src=u;}}
 function vistaAct(){
   const a=actividades.find(x=>x.id===S.act); if(!a){S.vista='acts';return pintar();}
   $('#cab').innerHTML='<button class="atras" id="atras" aria-label="Volver">←</button><h1>'+esc((a.codigo?a.codigo+' · ':'')+(a.nombre||'Actividad'))+'</h1><button class="guardar" id="bGuaA">Listo</button>';
